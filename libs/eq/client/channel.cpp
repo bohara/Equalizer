@@ -930,7 +930,7 @@ void Channel::drawStatistics()
 
     glMatrixMode( GL_MODELVIEW );
     glDisable( GL_LIGHTING );
-    
+
     Window* window = getWindow();
     const Window::Font* font = window->getSmallFont();
 
@@ -1148,6 +1148,9 @@ void Channel::drawStatistics()
         dim += .1f;
     }
 
+    glLogicOp( GL_XOR );
+    glEnable( GL_COLOR_LOGIC_OP );
+
     //----- Entitity names
     for( std::map< uint32_t, EntityData >::const_iterator i = entities.begin();
          i != entities.end(); ++i )
@@ -1208,6 +1211,7 @@ void Channel::drawStatistics()
     glRasterPos3f( x+1.f, nextY-12.f, 0.f );
     glColor3f( 1.f, 1.f, 1.f );
     font->draw( "channel" );
+    glDisable( GL_COLOR_LOGIC_OP );
 
     for( size_t i = 1; i < Statistic::CONFIG_START_FRAME; ++i )
     {
@@ -1234,7 +1238,9 @@ void Channel::drawStatistics()
 
             glColor3f( 1.f, 1.f, 1.f );
             glRasterPos3f( x+1.f, nextY-12.f, 0.f );
+            glEnable( GL_COLOR_LOGIC_OP );
             font->draw( "window" );
+            glDisable( GL_COLOR_LOGIC_OP );
             break;
 
           case Statistic::NODE_FRAME_DECOMPRESS:
@@ -1243,7 +1249,9 @@ void Channel::drawStatistics()
 
             glColor3f( 1.f, 1.f, 1.f );
             glRasterPos3f( x+1.f, nextY-12.f, 0.f );
+            glEnable( GL_COLOR_LOGIC_OP );
             font->draw( "node" );
+            glDisable( GL_COLOR_LOGIC_OP );
             break;
 
           default:
@@ -1358,9 +1366,9 @@ void Channel::_frameTiles( const ChannelFrameTilesPacket* packet )
             {
                 const Frame* frame = frames[i];
                 const Images& images = frame->getImages();
-                for( size_t index = nImages[i]; index < images.size(); ++index )
+                for( size_t j = nImages[i]; j < images.size(); ++j )
                 {
-                    Image* image = images[index];
+                    Image* image = images[j];
                     const PixelViewport& pvp = image->getPixelViewport();
                     image->setOffset( pvp.x + tilePacket->pvp.x,
                                       pvp.y + tilePacket->pvp.y );
@@ -1808,8 +1816,8 @@ bool Channel::_cmdFrameStart( co::Command& command )
 
     const size_t index = packet->frameNumber % _impl->statistics->size();
     detail::Channel::FrameStatistics& statistic = _impl->statistics.data[index];
+    EQASSERTINFO( statistic.used == 0, packet->frameNumber );
     EQASSERT( statistic.data.empty( ));
-    EQASSERT( statistic.used == 0 );
     statistic.used = 1;
 
     resetRenderContext();

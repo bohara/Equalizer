@@ -234,8 +234,8 @@ void Channel::frameAssemble( const eq::uint128_t& frameID )
 
         if( accum.buffer && !accum.buffer->usesFBO( ))
         {
-            EQWARN << "Current viewport different from view viewport, ";
-            EQWARN << "idle anti-aliasing not implemented." << std::endl;
+            EQWARN << "Current viewport different from view viewport, "
+                   << "idle anti-aliasing not implemented." << std::endl;
             accum.step = 0;
         }
 
@@ -658,7 +658,10 @@ void Channel::_drawModel( const Model* scene )
     const InitData& initData =
         static_cast<Config*>( getConfig( ))->getInitData();
     if( !initData.useROI( ))
+    {
+        declareRegion( getPixelViewport( ));
         return;
+    }
 
 #ifndef NDEBUG // region border
     const eq::PixelViewport& pvp = getPixelViewport();
@@ -756,6 +759,8 @@ void Channel::_drawHelp()
     applyViewport();
     setupAssemblyState();
 
+    glLogicOp( GL_XOR );
+    glEnable( GL_COLOR_LOGIC_OP );
     glDisable( GL_LIGHTING );
     glDisable( GL_DEPTH_TEST );
 

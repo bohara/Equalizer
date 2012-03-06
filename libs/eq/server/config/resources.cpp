@@ -281,7 +281,7 @@ Compound* Resources::_addMonoCompound( Compound* root, const Channels& channels,
     Compound* compound = 0;
     const bool multiProcess = flags & ( ConfigParams::FLAG_MULTIPROCESS | 
                                         ConfigParams::FLAG_MULTIPROCESS_DB );
-    const Channels& active = _filter( channels, multiProcess ? " mp " : " mt " );
+    const Channels& active = _filter( channels, multiProcess ? " mp " : " mt ");
 
     if( name == EQ_SERVER_CONFIG_LAYOUT_SIMPLE )
         /* nop */;
@@ -300,7 +300,7 @@ Compound* Resources::_addMonoCompound( Compound* root, const Channels& channels,
     else if( name == EQ_SERVER_CONFIG_LAYOUT_DB_2D )
     {
         EQASSERT( multiProcess );
-        compound = _addDB2DCompound( root, active );
+        compound = _addDB2DCompound( root, channels );
     }
     else
     {
@@ -320,11 +320,8 @@ Compound* Resources::_addStereoCompound(Compound* root, const Channels& channels
     const Channel* channel = root->getChannel();
     const Layout* layout = channel->getLayout();
     const std::string& name = layout->getName();
-    if( name == EQ_SERVER_CONFIG_LAYOUT_SIMPLE ||
-        name == EQ_SERVER_CONFIG_LAYOUT_DB_2D )     // TODO: not supported yet
-    {
+    if( name == EQ_SERVER_CONFIG_LAYOUT_SIMPLE )
         return 0;
-    }
 
     Compound* compound = new Compound( root );
     compound->setName( "Stereo" );
@@ -332,7 +329,8 @@ Compound* Resources::_addStereoCompound(Compound* root, const Channels& channels
 
     const bool multiProcess = flags & ( ConfigParams::FLAG_MULTIPROCESS | 
                                         ConfigParams::FLAG_MULTIPROCESS_DB );
-    const Channels& active = _filter( channels, multiProcess ? " mp " : " mt " );
+    const Channels& active = name == EQ_SERVER_CONFIG_LAYOUT_DB_2D ? channels :
+                            _filter( channels, multiProcess ? " mp " : " mt " );
 
     const size_t nChannels = active.size();
     const ChannelsCIter split = active.begin() + (nChannels >> 1);
@@ -528,30 +526,34 @@ static Channels _filterLocalChannels( const Channels& input,
                                       const Compound& filter )
 {
     Channels result;
-
     for( ChannelsCIter i = input.begin(); i != input.end(); ++i )
     {
         const Node* node = (*i)->getNode();
         const Node* filterNode = filter.getChannel()->getNode();
-        if( node->getName() == filterNode->getName() )
+        if( node == filterNode )
             result.push_back( *i );
     }
     return result;
 }
 
-Compound* Resources::_addDB2DCompound( Compound* root, const Channels& channels )
+Compound* Resources::_addDB2DCompound( Compound* root,
+                                       const Channels& channels )
 {
+    // TODO: Optimized compositing?
+    root->setBuffers( eq::Frame::BUFFER_COLOR | eq::Frame::BUFFER_DEPTH );
     const Channels& dbChannels = _filter( channels, " mt mp " );
-    Compound* compound = _addDBCompound( root, dbChannels );
+    Compound* compound = _addDSCompound( root, dbChannels );
 
     const Compounds& children = compound->getChildren();
     for( CompoundsCIter i = children.begin(); i != children.end(); ++i )
     {
         Compound* child = *i;
-        child->addEqualizer( new LoadEqualizer( LoadEqualizer::MODE_2D ));
+        Compound* drawChild = child->getChildren().front();
+        drawChild->addEqualizer( new LoadEqualizer( LoadEqualizer::MODE_2D ));
+        drawChild->setName( EQ_SERVER_CONFIG_LAYOUT_2D_DYNAMIC );
 
         const Channels& localChannels = _filterLocalChannels( channels, child );
-        _fill2DCompound( child, localChannels );
+        _fill2DCompound( drawChild, localChannels );
     }
 
     return compound;
@@ -562,8 +564,7 @@ const Compounds& Resources::_addSources( Compound* compound,
 {
     const Channel* rootChannel = compound->getChannel();
     const Segment* segment = rootChannel->getSegment();
-    const Channel* outputChannel = segment ? segment->getChannel() :
-                                             rootChannel;
+    const Channel* outputChannel = segment ? segment->getChannel() : 0;
 
     for( ChannelsCIter i = channels.begin(); i != channels.end(); ++i )
     {
