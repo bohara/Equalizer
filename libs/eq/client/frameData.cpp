@@ -1,16 +1,16 @@
 
-/* Copyright (c) 2006-2011, Stefan Eilemann <eile@equalizergraphics.com>
+/* Copyright (c) 2006-2012, Stefan Eilemann <eile@equalizergraphics.com>
  *                    2010, Cedric Stalder <cedric.stalder@gmail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
  * by the Free Software Foundation.
- *  
+ *
  * This library is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
  * FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more
  * details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public License
  * along with this library; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -24,17 +24,18 @@
 #include "image.h"
 #include "log.h"
 #include "nodePackets.h"
+#include "pixelData.h"
 #include "roiFinder.h"
 
 #include <eq/fabric/drawableConfig.h>
+#include <eq/util/objectManager.h>
 #include <co/command.h>
 #include <co/commandFunc.h>
 #include <co/connectionDescription.h>
 #include <co/dataIStream.h>
 #include <co/dataOStream.h>
-#include <co/base/global.h>
-#include <co/base/monitor.h>
-#include <co/base/scopedMutex.h>
+#include <lunchbox/monitor.h>
+#include <lunchbox/scopedMutex.h>
 
 #include <co/plugins/compressor.h>
 #include <algorithm>
@@ -44,7 +45,7 @@ namespace eq
 
 typedef co::CommandFunc<FrameData> CmdFunc;
 
-FrameData::FrameData() 
+FrameData::FrameData()
         : _version( co::VERSION_NONE.low( ))
         , _useAlpha( true )
         , _colorQuality( 1.f )
@@ -53,7 +54,6 @@ FrameData::FrameData()
         , _depthCompressor( EQ_COMPRESSOR_AUTO )
 {
     _roiFinder = new ROIFinder();
-    EQINFO << "New FrameData @" << (void*)this << std::endl;
 }
 
 FrameData::~FrameData()
@@ -63,8 +63,8 @@ FrameData::~FrameData()
     for( Images::const_iterator i = _imageCache.begin();
          i != _imageCache.end(); ++i )
     {
-        Image* image = *i;
-        EQWARN << "Unflushed image in FrameData destructor" << std::endl;
+       Image* image = *i;
+        LBWARN << "Unflushed image in FrameData destructor" << std::endl;
         delete image;
     }
     _imageCache.clear();
@@ -77,7 +77,7 @@ void FrameData::setQuality( Frame::Buffer buffer, float quality )
 {
     if( buffer != Frame::BUFFER_COLOR )
     {
-        EQASSERT( buffer == Frame::BUFFER_DEPTH );
+        LBASSERT( buffer == Frame::BUFFER_DEPTH );
         _depthQuality = quality;
         return;
     }
@@ -89,7 +89,7 @@ void FrameData::useCompressor( const Frame::Buffer buffer, const uint32_t name )
 {
     if( buffer != Frame::BUFFER_COLOR )
     {
-        EQASSERT( buffer == Frame::BUFFER_DEPTH );
+        LBASSERT( buffer == Frame::BUFFER_DEPTH );
         _depthCompressor = name;
         return;
     }
@@ -99,7 +99,7 @@ void FrameData::useCompressor( const Frame::Buffer buffer, const uint32_t name )
 
 void FrameData::getInstanceData( co::DataOStream& os )
 {
-    EQUNREACHABLE;
+    LBUNREACHABLE;
     _data.serialize( os );
 }
 
@@ -107,7 +107,7 @@ void FrameData::applyInstanceData( co::DataIStream& is )
 {
     clear();
     _data.deserialize( is );
-    EQLOG( LOG_ASSEMBLY ) << "applied " << this << std::endl;
+    LBLOG( LOG_ASSEMBLY ) << "applied " << this << std::endl;
 }
 
 FrameData::Data& FrameData::Data::operator = ( const Data& rhs )
@@ -152,8 +152,7 @@ void FrameData::flush()
 {
     clear();
 
-    for( Images::const_iterator i = _imageCache.begin();
-         i != _imageCache.end(); ++i )
+    for( ImagesCIter i = _imageCache.begin(); i != _imageCache.end(); ++i )
     {
         Image* image = *i;
         image->flush();
@@ -161,6 +160,22 @@ void FrameData::flush()
     }
 
     _imageCache.clear();
+}
+
+void FrameData::deleteGLObjects( ObjectManager* om )
+{
+    for( ImagesCIter i = _images.begin(); i != _images.end(); ++i )
+        (*i)->deleteGLObjects( om );
+    for( ImagesCIter i = _imageCache.begin(); i != _imageCache.end(); ++i )
+        (*i)->deleteGLObjects( om );
+}
+
+void FrameData::resetPlugins()
+{
+    for( ImagesCIter i = _images.begin(); i != _images.end(); ++i )
+        (*i)->resetPlugins();
+    for( ImagesCIter i = _imageCache.begin(); i != _imageCache.end(); ++i )
+        (*i)->resetPlugins();
 }
 
 Image* FrameData::newImage( const eq::Frame::Type type,
@@ -197,7 +212,7 @@ Image* FrameData::_allocImage( const eq::Frame::Type type,
     if( setQuality_ )
     {
         image->setQuality( Frame::BUFFER_COLOR, _colorQuality );
-        image->setQuality( Frame::BUFFER_DEPTH, _depthQuality ); 
+        image->setQuality( Frame::BUFFER_DEPTH, _depthQuality );
     }
 
     image->useCompressor( Frame::BUFFER_COLOR, _colorCompressor );
@@ -207,77 +222,87 @@ Image* FrameData::_allocImage( const eq::Frame::Type type,
                               EQ_COMPRESSOR_DATATYPE_DEPTH );
     switch( config.colorBits )
     {
-        case 16:  
-            image->setInternalFormat( Frame::BUFFER_COLOR, 
+        case 16:
+            image->setInternalFormat( Frame::BUFFER_COLOR,
                                       EQ_COMPRESSOR_DATATYPE_RGBA16F );
             break;
-        case 32:  
-            image->setInternalFormat( Frame::BUFFER_COLOR, 
+        case 32:
+            image->setInternalFormat( Frame::BUFFER_COLOR,
                                       EQ_COMPRESSOR_DATATYPE_RGBA32F );
             break;
         case 10:
-            image->setInternalFormat( Frame::BUFFER_COLOR, 
+            image->setInternalFormat( Frame::BUFFER_COLOR,
                                       EQ_COMPRESSOR_DATATYPE_RGB10_A2 );
             break;
         default:
-            image->setInternalFormat( Frame::BUFFER_COLOR, 
+            image->setInternalFormat( Frame::BUFFER_COLOR,
                                       EQ_COMPRESSOR_DATATYPE_RGBA );
     }
 
     return image;
 }
 
+#ifndef EQ_2_0_API
 void FrameData::readback( const Frame& frame,
-                          util::ObjectManager< const void* >* glObjects,
+                          ObjectManager* glObjects,
                           const DrawableConfig& config )
 {
-    readback( frame, glObjects, config, PixelViewports( 1, getPixelViewport( )));
-}
+    const Images& images = startReadback( frame, glObjects, config,
+                                        PixelViewports( 1, getPixelViewport( )));
 
-void FrameData::readback( const Frame& frame,
-                          util::ObjectManager< const void* >* glObjects,
-                          const DrawableConfig& config,
-                          const PixelViewports& regions )
+    for( ImagesCIter i = images.begin(); i != images.end(); ++i )
+        (*i)->finishReadback( frame.getZoom(), glObjects->glewGetContext( ));
+}
+#endif
+
+Images FrameData::startReadback( const Frame& frame,
+                                 ObjectManager* glObjects,
+                                 const DrawableConfig& config,
+                                 const PixelViewports& regions )
 {
+    Images images;
+
     if( _data.buffers == Frame::BUFFER_NONE )
-        return;
+        return images;
 
     const eq::PixelViewport& framePVP = getPixelViewport();
     const PixelViewport      absPVP   = framePVP + frame.getOffset();
     if( !absPVP.isValid( ))
-        return;
+        return images;
 
     const Zoom& zoom = frame.getZoom();
     if( !zoom.isValid( ))
     {
-        EQWARN << "Invalid zoom factor, skipping frame" << std::endl;
-        return;
+        LBWARN << "Invalid zoom factor, skipping frame" << std::endl;
+        return images;
     }
-
-// TODO: issue #85: move automatic ROI detection to eq::Channel
-#if 0
-    PixelViewports pvps;
-    if( _data.buffers & Frame::BUFFER_DEPTH && zoom == Zoom::NONE )
-        pvps = _roiFinder->findRegions( _data.buffers, absPVP, zoom,
-//                    frame.getAssemblyStage(), frame.getFrameID(), glObjects );
-                    0, 0, glObjects );
-    else
-        pvps.push_back( absPVP );
-#endif
 
     // readback the whole screen when using textures
     if( getType() == eq::Frame::TYPE_TEXTURE )
     {
         Image* image = newImage( getType(), config );
-        image->readback( getBuffers(), absPVP, zoom, glObjects );
+        if( image->startReadback( getBuffers(), absPVP, zoom, glObjects ))
+            images.push_back( image );
         image->setOffset( 0, 0 );
-        return;
+        return images;
     }
-    // else read the given regions
-    EQASSERT( getType() == eq::Frame::TYPE_MEMORY );
+    //else read only required regions
 
+// TODO: issue #85: move automatic ROI detection to eq::Channel
+#if 0
+    PixelViewports regions;
+    if( _data.buffers & Frame::BUFFER_DEPTH && zoom == Zoom::NONE )
+        regions = _roiFinder->findRegions( _data.buffers, absPVP, zoom,
+//                    frame.getAssemblyStage(), frame.getFrameID(), glObjects );
+                                        0, 0, glObjects );
+    else
+        regions.push_back( absPVP );
+#endif
+
+    LBASSERT( getType() == eq::Frame::TYPE_MEMORY );
     const eq::Pixel& pixel = getPixel();
-    for( size_t i = 0; i < regions.size(); ++i )
+
+    for( uint32_t i = 0; i < regions.size(); ++i )
     {
         PixelViewport pvp = regions[ i ] + frame.getOffset();
         pvp.intersect( absPVP );
@@ -285,33 +310,24 @@ void FrameData::readback( const Frame& frame,
             continue;
 
         Image* image = newImage( getType(), config );
-        image->readback( getBuffers(), pvp, zoom, glObjects );
+        if( image->startReadback( getBuffers(), pvp, zoom, glObjects ))
+            images.push_back( image );
 
         pvp -= frame.getOffset();
         image->setOffset( (pvp.x - framePVP.x) * pixel.w,
                           (pvp.y - framePVP.y) * pixel.h );
-#ifndef NDEBUG
-        if( getenv( "EQ_DUMP_IMAGES" ))
-        {
-            static co::base::a_int32_t counter;
-            std::ostringstream stringstream;
-
-            stringstream << "Image_" << std::setfill( '0' ) << std::setw(5)
-                         << ++counter;
-            image->writeImages( stringstream.str( ));
-        }
-#endif
     }
+    return images;
 }
 
 void FrameData::setVersion( const uint64_t version )
 {
-    EQASSERTINFO( _version <= version, _version << " > " << version );
+    LBASSERTINFO( _version <= version, _version << " > " << version );
     _version = version;
-    EQLOG( LOG_ASSEMBLY ) << "New v" << version << std::endl;
+    LBLOG( LOG_ASSEMBLY ) << "New v" << version << std::endl;
 }
 
-void FrameData::waitReady( const uint32_t timeout ) const 
+void FrameData::waitReady( const uint32_t timeout ) const
 {
     if( !_readyVersion.timedWaitGE( _version, timeout ))
         throw Exception( Exception::TIMEOUT_INPUTFRAME );
@@ -325,33 +341,33 @@ void FrameData::setReady()
 void FrameData::setReady( const NodeFrameDataReadyPacket* packet )
 {
     clear();
-    EQASSERT(  packet->frameData.version.high() == 0 );
-    EQASSERT( _readyVersion < packet->frameData.version.low( ));
-    EQASSERT( _readyVersion == 0 ||
+    LBASSERT(  packet->frameData.version.high() == 0 );
+    LBASSERT( _readyVersion < packet->frameData.version.low( ));
+    LBASSERT( _readyVersion == 0 ||
               _readyVersion + 1 == packet->frameData.version.low( ));
-    EQASSERT( _version == packet->frameData.version.low( ));
+    LBASSERT( _version == packet->frameData.version.low( ));
 
     _images.swap( _pendingImages );
     _data = packet->data;
     _setReady( packet->frameData.version.low());
 
-    EQLOG( LOG_ASSEMBLY ) << this << " applied v" 
+    LBLOG( LOG_ASSEMBLY ) << this << " applied v"
                           << packet->frameData.version.low() << std::endl;
 }
 
 void FrameData::_setReady( const uint64_t version )
 {
-    
-    EQASSERTINFO( _readyVersion <= version,
+
+    LBASSERTINFO( _readyVersion <= version,
                   "v" << _version << " ready " << _readyVersion << " new "
                       << version );
 
-    co::base::ScopedMutex< co::base::SpinLock > mutex( _listeners );
+    lunchbox::ScopedMutex< lunchbox::SpinLock > mutex( _listeners );
     if( _readyVersion >= version )
         return;
 
     _readyVersion = version;
-    EQLOG( LOG_ASSEMBLY ) << "set ready " << this << ", " << _listeners->size()
+    LBLOG( LOG_ASSEMBLY ) << "set ready " << this << ", " << _listeners->size()
                           << " monitoring" << std::endl;
 
     for( Listeners::iterator i= _listeners->begin();
@@ -362,22 +378,22 @@ void FrameData::_setReady( const uint64_t version )
     }
 }
 
-void FrameData::addListener( co::base::Monitor<uint32_t>& listener )
+void FrameData::addListener( lunchbox::Monitor<uint32_t>& listener )
 {
-    co::base::ScopedMutex< co::base::SpinLock > mutex( _listeners );
+    lunchbox::ScopedMutex< lunchbox::SpinLock > mutex( _listeners );
 
     _listeners->push_back( &listener );
     if( _readyVersion >= _version )
         ++listener;
 }
 
-void FrameData::removeListener( co::base::Monitor<uint32_t>& listener )
+void FrameData::removeListener( lunchbox::Monitor<uint32_t>& listener )
 {
-    co::base::ScopedMutex< co::base::SpinLock > mutex( _listeners );
+    lunchbox::ScopedMutex< lunchbox::SpinLock > mutex( _listeners );
 
     Listeners::iterator i = std::find( _listeners->begin(), _listeners->end(),
                                       &listener );
-    EQASSERT( i != _listeners->end( ));
+    LBASSERT( i != _listeners->end( ));
     _listeners->erase( i );
 }
 
@@ -398,7 +414,7 @@ bool FrameData::addImage( const NodeFrameDataTransmitPacket* packet )
     for( unsigned i = 0; i < 2; ++i )
     {
         const Frame::Buffer buffer = buffers[i];
-        
+
         if( packet->buffers & buffer )
         {
             PixelData pixelData;
@@ -424,8 +440,8 @@ bool FrameData::addImage( const NodeFrameDataTransmitPacket* packet )
                 {
                     const uint64_t size = *reinterpret_cast< uint64_t*>( data );
                     data += sizeof( uint64_t );
-                    
-                    pixelData.compressedSize[j] = size; 
+
+                    pixelData.compressedSize[j] = size;
                     pixelData.compressedData[j] = data;
                     data += size;
                 }
@@ -436,7 +452,7 @@ bool FrameData::addImage( const NodeFrameDataTransmitPacket* packet )
                 data += sizeof( uint64_t );
                 pixelData.pixels = data;
                 data += size;
-                EQASSERT( size == pixelData.pvp.getArea()*pixelData.pixelSize );
+                LBASSERT( size == pixelData.pvp.getArea()*pixelData.pixelSize );
             }
 
             image->setZoom( packet->zoom );
@@ -445,7 +461,7 @@ bool FrameData::addImage( const NodeFrameDataTransmitPacket* packet )
         }
     }
 
-    EQASSERT( _readyVersion < packet->frameData.version.low( ));
+    LBASSERT( _readyVersion < packet->frameData.version.low( ));
     _pendingImages.push_back( image );
     return true;
 }

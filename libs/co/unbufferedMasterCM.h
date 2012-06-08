@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2007-2011, Stefan Eilemann <eile@equalizergraphics.com> 
+/* Copyright (c) 2007-2012, Stefan Eilemann <eile@equalizergraphics.com> 
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -18,7 +18,7 @@
 #ifndef EQNET_UNBUFFEREDMASTERCM_H
 #define EQNET_UNBUFFEREDMASTERCM_H
 
-#include "masterCM.h"           // base class
+#include "versionedMasterCM.h"           // base class
 
 namespace co
 {
@@ -29,7 +29,7 @@ namespace co
      * buffering.
      * @internal
      */
-    class UnbufferedMasterCM : public MasterCM
+    class UnbufferedMasterCM : public VersionedMasterCM
     {
     public:
         UnbufferedMasterCM( Object* object );
@@ -41,9 +41,6 @@ namespace co
         virtual void setAutoObsolete( const uint32_t ) {} 
         virtual uint32_t getAutoObsolete() const { return 0; }
         //@}
-
-        virtual void addSlave( Command& command, 
-                               NodeMapObjectReplyPacket& reply );
 
     private:
         /* The command handlers. */

@@ -22,8 +22,10 @@ set(CO_PUBLIC_HEADERS
     dataIStreamArchive.h
     dataOStream.h
     dataOStreamArchive.h
+    defines.h
     dispatcher.h
     error.h
+    errorRegistry.h
     exception.h
     global.h
     init.h
@@ -33,24 +35,33 @@ set(CO_PUBLIC_HEADERS
     node.h
     nodeType.h
     object.h
+    objectFactory.h
+    objectHandler.h
+    objectMap.h
     objectVersion.h
     packets.h
+    pluginRegistry.h
     queueMaster.h
     queuePackets.h
     queueSlave.h
     serializable.h
     types.h
     worker.h
+    zeroconf.h
   )
 
 set(CO_HEADERS 
     barrierPackets.h
+    compressor.h
+    compressorInfo.h
+    cpuCompressor.h
     dataIStreamQueue.h
     dataOStream.ipp
     deltaMasterCM.h
+    error.cpp
+    errorRegistry.cpp
     eventConnection.h
     fullMasterCM.h
-    masterCM.h
     nodePackets.h
     nullCM.h
     objectCM.h
@@ -59,13 +70,15 @@ set(CO_HEADERS
     objectDeltaDataOStream.h
     objectInstanceDataOStream.h
     objectSlaveDataOStream.h
-    pipeConnection.h
     pgmConnection.h
+    pipeConnection.h
+    plugin.h
     rspConnection.h
     socketConnection.h
     staticMasterCM.h
     staticSlaveCM.h
     unbufferedMasterCM.h
+    versionedMasterCM.h
     versionedSlaveCM.h
   )
 
@@ -75,9 +88,11 @@ set(CO_SOURCES
     command.cpp
     commandCache.cpp
     commandQueue.cpp
+    compressor.cpp
     connection.cpp
     connectionDescription.cpp
     connectionSet.cpp
+    cpuCompressor.cpp
     dataIStream.cpp
     dataIStreamQueue.cpp
     dataOStream.cpp
@@ -89,7 +104,6 @@ set(CO_SOURCES
     init.cpp
     instanceCache.cpp
     localNode.cpp
-    masterCM.cpp
     node.cpp
     object.cpp
     objectCM.cpp
@@ -97,21 +111,26 @@ set(CO_SOURCES
     objectDataOStream.cpp
     objectDeltaDataOStream.cpp
     objectInstanceDataOStream.cpp
+    objectMap.cpp
     objectSlaveDataOStream.cpp
     objectStore.cpp
     objectVersion.cpp
     packets.cpp
     pgmConnection.cpp
     pipeConnection.cpp
+    plugin.cpp
+    pluginRegistry.cpp
     queueMaster.cpp
     queueSlave.cpp
+    serializable.cpp
     socketConnection.cpp
-    staticMasterCM.cpp
     staticSlaveCM.cpp
     unbufferedMasterCM.cpp
     version.cpp
+    versionedMasterCM.cpp
     versionedSlaveCM.cpp
     worker.cpp
+    zeroconf.cpp
 )
   
 set(CO_COMPRESSOR_HEADERS

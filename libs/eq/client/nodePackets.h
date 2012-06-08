@@ -79,20 +79,20 @@ namespace eq
                 size    = sizeof( NodeCreatePipePacket );
             }
 
-        co::base::UUID pipeID;
+        UUID pipeID;
         bool     threaded;
     };
 
     struct NodeDestroyPipePacket : public NodePacket
     {
-        NodeDestroyPipePacket( const co::base::UUID& id )
+        NodeDestroyPipePacket( const UUID& id )
                 : pipeID( id )
             {
                 command = fabric::CMD_NODE_DESTROY_PIPE;
                 size    = sizeof( NodeDestroyPipePacket );
             }
 
-        const co::base::UUID pipeID;
+        const UUID pipeID;
     };
     
     struct NodeFrameStartPacket : public NodePacket
@@ -158,12 +158,12 @@ namespace eq
         uint32_t      frameNumber;
         uint64_t useAlpha; // bool + valgrind padding
 
-        EQ_ALIGN8( uint8_t data[8] );
+        LB_ALIGN8( uint8_t data[8] );
     };
 
     struct NodeFrameDataReadyPacket : public NodePacket
     {
-        NodeFrameDataReadyPacket( const FrameData* fd )
+        NodeFrameDataReadyPacket( const FrameDataPtr fd )
                 : frameData( fd ), data( fd->_data )
             {
                 command = fabric::CMD_NODE_FRAMEDATA_READY;

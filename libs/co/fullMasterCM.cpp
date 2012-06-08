@@ -1,15 +1,15 @@
 
-/* Copyright (c) 2007-2011, Stefan Eilemann <eile@equalizergraphics.com> 
+/* Copyright (c) 2007-2012, Stefan Eilemann <eile@equalizergraphics.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
  * by the Free Software Foundation.
- *  
+ *
  * This library is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
  * FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more
  * details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public License
  * along with this library; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -33,14 +33,14 @@ namespace co
 namespace
 {
 #ifdef EQ_INSTRUMENT
-base::a_int32_t _bytesBuffered;
+lunchbox::a_int32_t _bytesBuffered;
 #endif
 }
 
 typedef CommandFunc<FullMasterCM> CmdFunc;
 
 FullMasterCM::FullMasterCM( Object* object )
-        : MasterCM( object )
+        : VersionedMasterCM( object )
         , _commitCount( 0 )
         , _nVersions( 0 )
 {}
@@ -64,7 +64,7 @@ FullMasterCM::~FullMasterCM()
 
 void FullMasterCM::sendInstanceData( Nodes& nodes )
 {
-    EQ_TS_THREAD( _cmdThread );
+    LB_TS_THREAD( _cmdThread );
     Mutex mutex( _slaves );
     if( !_slaves->empty( ))
         return;
@@ -75,15 +75,15 @@ void FullMasterCM::sendInstanceData( Nodes& nodes )
 
 void FullMasterCM::init()
 {
-    EQASSERT( _commitCount == 0 );
-    MasterCM::init();
+    LBASSERT( _commitCount == 0 );
+    VersionedMasterCM::init();
 
     InstanceData* data = _newInstanceData();
 
     data->os.enableCommit( VERSION_FIRST, *_slaves );
     _object->getInstanceData( data->os );
     data->os.disable();
-        
+
     _instanceDatas.push_back( data );
     ++_version;
     ++_commitCount;
@@ -98,7 +98,7 @@ void FullMasterCM::setAutoObsolete( const uint32_t count )
 
 void FullMasterCM::_updateCommitCount( const uint32_t incarnation )
 {
-    EQASSERT( !_instanceDatas.empty( ));
+    LBASSERT( !_instanceDatas.empty( ));
     if( incarnation == CO_COMMIT_NEXT )
     {
         ++_commitCount;
@@ -111,7 +111,7 @@ void FullMasterCM::_updateCommitCount( const uint32_t incarnation )
         return;
     }
 
-    EQASSERTINFO( incarnation >= _commitCount,
+    LBASSERTINFO( incarnation >= _commitCount,
 		  "Detected decreasing commit incarnation counter" );
     _commitCount = incarnation;
 
@@ -124,7 +124,7 @@ void FullMasterCM::_updateCommitCount( const uint32_t incarnation )
 
 #ifdef EQ_INSTRUMENT
         _bytesBuffered -= data->os.getSaveBuffer().getSize();
-        EQINFO << _bytesBuffered << " bytes used" << std::endl;
+        LBINFO << _bytesBuffered << " bytes used" << std::endl;
 #endif
         _releaseInstanceData( data );
         _instanceDatas.pop_back();
@@ -135,13 +135,13 @@ void FullMasterCM::_updateCommitCount( const uint32_t incarnation )
     {
         // tweak commitCount of minimum retained version for correct obsoletion
         data->commitCount = 0;
-	_version = data->os.getVersion();
+        _version = data->os.getVersion();
     }
 }
 
 void FullMasterCM::_obsolete()
 {
-    EQASSERT( !_instanceDatas.empty( ));
+    LBASSERT( !_instanceDatas.empty( ));
     while( _instanceDatas.size() > 1 && _commitCount > _nVersions )
     {
         InstanceData* data = _instanceDatas.front();
@@ -150,13 +150,13 @@ void FullMasterCM::_obsolete()
 
 #ifdef EQ_INSTRUMENT
         _bytesBuffered -= data->os.getSaveBuffer().getSize();
-        EQINFO << _bytesBuffered << " bytes used" << std::endl;
+        LBINFO << _bytesBuffered << " bytes used" << std::endl;
 #endif
 #if 0
-        EQINFO
+        LBINFO
             << "Remove v" << data->os.getVersion() << " c" << data->commitCount
             << "@" << _commitCount << "/" << _nVersions << " from "
-            << base::className( _object ) << " " << ObjectVersion( _object )
+            << lunchbox::className( _object ) << " " << ObjectVersion( _object )
             << std::endl;
 #endif
         _releaseInstanceData( data );
@@ -165,51 +165,28 @@ void FullMasterCM::_obsolete()
     _checkConsistency();
 }
 
-void FullMasterCM::addSlave( Command& command, NodeMapObjectReplyPacket& reply )
+void FullMasterCM::_initSlave( NodePtr node, const uint128_t& version,
+                               const NodeMapObjectPacket* packet,
+                               NodeMapObjectSuccessPacket& success,
+                               NodeMapObjectReplyPacket& reply )
 {
-    EQ_TS_THREAD( _cmdThread );
-    EQASSERT( command->type == PACKETTYPE_CO_NODE );
-    EQASSERT( command->command == CMD_NODE_MAP_OBJECT );
-
-    NodePtr node = command.getNode();
-    const NodeMapObjectPacket* packet = command.get< NodeMapObjectPacket >();
-    const uint128_t requested  = packet->requestedVersion;
-    const uint32_t instanceID = packet->instanceID;
-
-    Mutex mutex( _slaves );
-    EQASSERT( _version != VERSION_NONE );
     _checkConsistency();
 
-    // add to subscribers
-    ++_slavesCount[ node->getNodeID() ];
-    _slaves->push_back( node );
-    stde::usort( *_slaves );
-
-    if( requested == VERSION_NONE ) // no data to send
-    {
-        _sendEmptyVersion( node, instanceID, _version );
-        reply.version = _version;
-        return;
-    }
-
     const uint128_t oldest = _instanceDatas.front()->os.getVersion();
-    uint128_t start = (requested == VERSION_OLDEST || requested < oldest ) ?
-                          oldest : requested;
+    uint128_t start = (version == VERSION_OLDEST || version < oldest ) ?
+                          oldest : version;
     uint128_t end = _version;
-    const bool useCache = packet->masterInstanceID == _object->getInstanceID();
 
 #ifndef NDEBUG
-    if( requested != VERSION_OLDEST && requested < start )
-        EQINFO << "Mapping version " << start
-               << " instead of requested version " << requested << std::endl;
+    if( version != VERSION_OLDEST && version < start )
+        LBINFO << "Mapping version " << start << " instead of requested "
+               << version << std::endl;
 #endif
 
     reply.version = start;
-    reply.useCache = packet->useCache && useCache;
-
     if( reply.useCache )
     {
-        if( packet->minCachedVersion <= start && 
+        if( packet->minCachedVersion <= start &&
             packet->maxCachedVersion >= start )
         {
 #ifdef EQ_INSTRUMENT_MULTICAST
@@ -219,7 +196,7 @@ void FullMasterCM::addSlave( Command& command, NodeMapObjectReplyPacket& reply )
         }
         else if( packet->maxCachedVersion == end )
         {
-            end = EQ_MAX( start, packet->minCachedVersion - 1 );
+            end = LB_MAX( start, packet->minCachedVersion - 1 );
 #ifdef EQ_INSTRUMENT_MULTICAST
             _hit += _version - end;
 #endif
@@ -228,14 +205,16 @@ void FullMasterCM::addSlave( Command& command, NodeMapObjectReplyPacket& reply )
     }
 
 #if 0
-    EQLOG( LOG_OBJECTS )
+    LBLOG( LOG_OBJECTS )
         << *_object << ", instantiate on " << node->getNodeID() << " with v"
         << ((requested == VERSION_OLDEST) ? oldest : requested) << " ("
         << requested << ") sending " << start << ".." << end << " have "
         << _version - _nVersions << ".." << _version << " "
         << _instanceDatas.size() << std::endl;
 #endif
-    EQASSERT( start >= oldest );
+    LBASSERT( start >= oldest );
+
+    bool dataSent = false;
 
     // send all instance datas from start..end
     InstanceDataDeque::iterator i = _instanceDatas.begin();
@@ -244,18 +223,33 @@ void FullMasterCM::addSlave( Command& command, NodeMapObjectReplyPacket& reply )
 
     for( ; i != _instanceDatas.end() && (*i)->os.getVersion() <= end; ++i )
     {
+        if( !dataSent )
+        {
+            if( !node->multicast( success ))
+                node->send( success );
+            dataSent = true;
+        }
+
         InstanceData* data = *i;
-        EQASSERT( data );
-        data->os.sendMapData( node, instanceID );
+        LBASSERT( data );
+        data->os.sendMapData( node, packet->instanceID );
 
 #ifdef EQ_INSTRUMENT_MULTICAST
         ++_miss;
 #endif
     }
 
+    if( !dataSent )
+    {
+        node->send( success );
+        node->send( reply );
+    }
+    else if( !node->multicast( reply ))
+        node->send( reply );
+
 #ifdef EQ_INSTRUMENT_MULTICAST
     if( _miss % 100 == 0 )
-        EQINFO << "Cached " << _hit << "/" << _hit + _miss
+        LBINFO << "Cached " << _hit << "/" << _hit + _miss
                << " instance data transmissions" << std::endl;
 #endif
 }
@@ -263,8 +257,8 @@ void FullMasterCM::addSlave( Command& command, NodeMapObjectReplyPacket& reply )
 void FullMasterCM::_checkConsistency() const
 {
 #ifndef NDEBUG
-    EQASSERT( !_instanceDatas.empty( ));
-    EQASSERT( _object->isAttached() );
+    LBASSERT( !_instanceDatas.empty( ));
+    LBASSERT( _object->isAttached() );
 
     if( _version == VERSION_NONE )
         return;
@@ -274,12 +268,12 @@ void FullMasterCM::_checkConsistency() const
          i != _instanceDatas.rend(); ++i )
     {
         const InstanceData* data = *i;
-        EQASSERT( data->os.getVersion() != VERSION_NONE );
-        EQASSERTINFO( data->os.getVersion() == version,
+        LBASSERT( data->os.getVersion() != VERSION_NONE );
+        LBASSERTINFO( data->os.getVersion() == version,
                       data->os.getVersion() << " != " << version );
         if( data != _instanceDatas.front( ))
         {
-            EQASSERTINFO( data->commitCount + _nVersions >= _commitCount,
+            LBASSERTINFO( data->commitCount + _nVersions >= _commitCount,
                           data->commitCount << ", " << _commitCount << " [" <<
                           _nVersions << "]" );
         }
@@ -311,13 +305,13 @@ FullMasterCM::InstanceData* FullMasterCM::_newInstanceData()
 
 void FullMasterCM::_addInstanceData( InstanceData* data )
 {
-    EQASSERT( data->os.getVersion() != VERSION_NONE );
-    EQASSERT( data->os.getVersion() != VERSION_INVALID );
+    LBASSERT( data->os.getVersion() != VERSION_NONE );
+    LBASSERT( data->os.getVersion() != VERSION_INVALID );
 
     _instanceDatas.push_back( data );
 #ifdef EQ_INSTRUMENT
     _bytesBuffered += data->os.getSaveBuffer().getSize();
-    EQINFO << _bytesBuffered << " bytes used" << std::endl;
+    LBINFO << _bytesBuffered << " bytes used" << std::endl;
 #endif
 }
 
@@ -332,38 +326,48 @@ void FullMasterCM::_releaseInstanceData( InstanceData* data )
 
 uint128_t FullMasterCM::commit( const uint32_t incarnation )
 {
+    LBASSERT( _version != VERSION_NONE );
+
+    if( !_object->isDirty( ))
+    {
+        Mutex mutex( _slaves );
+        _updateCommitCount( incarnation );
+        _obsolete();
+        return _version;
+    }
+
+    _maxVersion.waitGE( _version.low() + 1 );
     Mutex mutex( _slaves );
 #if 0
-    EQLOG( LOG_OBJECTS ) << "commit v" << _version << " " << command 
+    LBLOG( LOG_OBJECTS ) << "commit v" << _version << " " << command
                          << std::endl;
 #endif
-    EQASSERT( _version != VERSION_NONE );
-
     _updateCommitCount( incarnation );
-    
-    if( _object->isDirty( ))
-    {
-        InstanceData* instanceData = _newInstanceData();
-
-        instanceData->os.enableCommit( _version + 1, *_slaves );
-        _object->getInstanceData( instanceData->os );
-        instanceData->os.disable();
-
-        if( instanceData->os.hasSentData( ))
-        {
-            ++_version;
-            EQASSERT( _version != VERSION_NONE );
-#if 0
-            EQINFO << "Committed v" << _version << "@" << _commitCount
-                   << ", id " << _object->getID() << std::endl;
-#endif
-            _addInstanceData( instanceData );
-        }
-        else
-            _instanceDataCache.push_back( instanceData );
-    }
+    _commit();
     _obsolete();
     return _version;
+}
+
+void FullMasterCM::_commit()
+{
+    InstanceData* instanceData = _newInstanceData();
+
+    instanceData->os.enableCommit( _version + 1, *_slaves );
+    _object->getInstanceData( instanceData->os );
+    instanceData->os.disable();
+
+    if( instanceData->os.hasSentData( ))
+    {
+        ++_version;
+        LBASSERT( _version != VERSION_NONE );
+#if 0
+        LBINFO << "Committed v" << _version << "@" << _commitCount << ", id "
+               << _object->getID() << std::endl;
+#endif
+        _addInstanceData( instanceData );
+    }
+    else
+        _instanceDataCache.push_back( instanceData );
 }
 
 void FullMasterCM::push( const uint128_t& groupID, const uint128_t& typeID,

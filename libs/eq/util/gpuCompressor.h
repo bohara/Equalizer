@@ -19,21 +19,21 @@
 #ifndef EQUTIL_GPUCOMPRESSOR_H
 #define EQUTIL_GPUCOMPRESSOR_H
 
-#include "../../co/base/compressor.h" // internal base class
+#include "../../co/compressor.h" // internal base class
 #include <eq/client/api.h>
-#include <eq/fabric/types.h>
+#include <eq/client/types.h>
 
 namespace eq
 {
 namespace util
 {
     /** A C++ class to abstract a GPU compressor instance. */
-    class GPUCompressor : public co::base::Compressor
+    class GPUCompressor : public co::Compressor
     {
     public:
         /** Construct a new compressorData */
         GPUCompressor( const GLEWContext* glewContext = 0 )
-            : Compressor(), _glewContext( glewContext ){}
+            : Compressor(), _glewContext( glewContext ) {}
 
         /** Set a valid glewContext */
         void setGLEWContext( const GLEWContext* glewContext )
@@ -100,21 +100,32 @@ namespace util
         bool initUploader( const uint32_t externalFormat,
                            const uint32_t internalFormat,
                            const uint64_t capabilities );
-
         /**
-         * Download data from the frame buffer or texture to cpu
+         * Start downloading data from the frame buffer or texture to cpu
          *
          * @param pvpIn the dimensions of the input data
          * @param source texture name to process.
          * @param flags capability flags for the compression
          * @param pvpOut the dimensions of the output data
          * @param out the pointer to the output data
+         * @return true if finishDownload() is needed, i.e., async download used
          */
-        void download( const fabric::PixelViewport& pvpIn,
-                       const unsigned               source,
-                       const uint64_t               flags,
-                       fabric::PixelViewport&       pvpOut,
-                       void**                       out );
+        bool startDownload( const fabric::PixelViewport& pvpIn,
+                            const unsigned source, const uint64_t flags,
+                            fabric::PixelViewport& pvpOut, void** out );
+
+        /**
+         * Finish downloading data from the frame buffer or texture to cpu
+         *
+         * @param pvpIn the dimensions of the input data
+         * @param flags capability flags for the compression
+         * @param pvpOut the dimensions of the output data
+         * @param out the pointer to the output data
+         */
+        void finishDownload( const fabric::PixelViewport& pvpIn,
+                             const uint64_t               flags,
+                             fabric::PixelViewport&       pvpOut,
+                             void**                       out );
 
         /**
          * Upload data from cpu to the frame buffer or texture 
@@ -168,7 +179,7 @@ namespace util
          * @param internalFormat consider only plugins with this tokenType, if
          *                       set to EQ_COMPRESSOR_DATATYPE_NONE consider
          *                       all.
-         * @param externalFormat consider only plugins with this outpuTokentype,
+         * @param externalFormat consider only plugins with this outputTokentype,
                                  if set to EQ_COMPRESSOR_DATATYPE_NONE consider
          *                       all.
          * @param capabilities the capabilities required by the transferer.
@@ -184,13 +195,12 @@ namespace util
                                             const float minQuality,
                                             const bool ignoreAlpha,
                                             const GLEWContext* glewContext,
-                                            co::base::CompressorInfos& result );
+                                            co::CompressorInfos& result );
 
     private:
         /** the initialized GLEW context describing corresponding
             to the current OpenGL context. */
         const GLEWContext* _glewContext;
-
     };
 }
 }

@@ -26,9 +26,8 @@
 namespace co
 {
     class ObjectCM;
-    struct NodeMapObjectReplyPacket;
 
-#  define CO_COMMIT_NEXT EQ_UNDEFINED_UINT32 //!< the next commit incarnation
+#  define CO_COMMIT_NEXT LB_UNDEFINED_UINT32 //!< the next commit incarnation
 
     /** 
      * A generic, distributed object.
@@ -47,7 +46,7 @@ namespace co
             STATIC,            //!< non-versioned, static object.
             INSTANCE,          //!< use only instance data
             DELTA,             //!< use pack/unpack delta
-            UNBUFFERED,        //!< versioned, but don't retain versions
+            UNBUFFERED         //!< versioned, but don't retain versions
         };
 
         /** Construct a new distributed object. */
@@ -65,7 +64,7 @@ namespace co
          * @return the local node to which this object is mapped, or 0 if the
          *         object is not mapped.
          */
-        LocalNodePtr getLocalNode(){ return _localNode; };
+        LocalNodePtr getLocalNode() { return _localNode; }
 
         /**
          * Set the object's unique identifier.
@@ -77,10 +76,10 @@ namespace co
          * overwritten with the identifier of the master object.
          * @version 1.1.5
          */
-        CO_API void setID( const base::UUID& identifier );
+        CO_API void setID( const UUID& identifier );
 
         /** @return the object's unique identifier. */
-        const base::UUID& getID() const { return _id; }
+        const UUID& getID() const { return _id; }
 
         /** @return the node-wide unique object instance identifier. */
         uint32_t getInstanceID() const { return _instanceID; }
@@ -98,6 +97,27 @@ namespace co
         //@{
         /** @return how the changes are to be handled. */
         virtual ChangeType getChangeType() const { return STATIC; }
+
+        /**
+         * Limit the number of queued versions of slave instances.
+         *
+         * Changing the return value of this method causes the master instance
+         * to block during commit() if any slave instance has reached the
+         * maximum number of queued versions. The method is called on the slave
+         * instance. Multiple slave instances may use different values.
+         *
+         * Changing the return value at runtime, that is, after the slave
+         * instance has been mapped is unsupported and causes undefined
+         * behavior.
+         *
+         * Not supported on master instances for slave object commits. Open an
+         * issue if you need this.
+         *
+         * @return the number of queued versions a slave instance may have.
+         * @version 1.3.2
+         */
+        virtual uint64_t getMaxVersions() const
+            { return std::numeric_limits< uint64_t >::max(); }
 
         /**
          * Return the compressor to be used for data transmission.
@@ -137,10 +157,10 @@ namespace co
          * multicast connection the data is only send once.
          *
          * @param groupID An identifier to group a set of push operations.
-         * @param typeID A per-push identifier.
+         * @param objectType A per-push identifier.
          * @param nodes The vector of nodes to push to.
          */
-        CO_API void push( const uint128_t& groupID, const uint128_t& typeID,
+        CO_API void push( const uint128_t& groupID, const uint128_t& objectType,
                           const Nodes& nodes );
 
         /** 
@@ -304,8 +324,8 @@ namespace co
                           const void* data, const uint64_t size );
 
         /** Send a packet to peer object instance(s) on another node. */
-        template< class T >
-        bool send( NodePtr node, ObjectPacket& packet, const std::vector<T>& v );
+        template< class T > bool
+        send( NodePtr node, ObjectPacket& packet, const std::vector<T>& v );
         //@}
 
         /** @name Notifications */
@@ -353,8 +373,8 @@ namespace co
         NodePtr getMasterNode();
 
         /** @internal */
-        void addSlave( Command& command, NodeMapObjectReplyPacket& reply );
-        CO_API void removeSlave( NodePtr node ); //!< @internal
+        void addSlave( Command& command );
+        CO_API void removeSlave( NodePtr node, const uint32_t instanceID );
         CO_API void removeSlaves( NodePtr node ); //!< @internal
         void setMasterNode( NodePtr node ); //!< @internal
         /** @internal */
@@ -377,7 +397,7 @@ namespace co
          * @internal
          * Called when object is attached from the receiver thread.
          */
-        CO_API virtual void attach( const base::UUID& id, 
+        CO_API virtual void attach( const UUID& id, 
                                     const uint32_t instanceID );
         /**
          * @internal
@@ -403,7 +423,7 @@ namespace co
     private:
         friend class DeltaMasterCM;
         friend class FullMasterCM;
-        friend class MasterCM;
+        friend class VersionedMasterCM;
         friend class ObjectCM;
         friend class StaticMasterCM;
         friend class StaticSlaveCM;
@@ -411,7 +431,7 @@ namespace co
         friend class VersionedSlaveCM;
 
         /** The session-unique object identifier. */
-        base::UUID _id;
+        UUID _id;
 
         /** The node where this object is attached. */
         LocalNodePtr _localNode;
@@ -424,14 +444,14 @@ namespace co
 
         void _setChangeManager( ObjectCM* cm );
 
-        EQ_TS_VAR( _thread );
+        LB_TS_VAR( _thread );
     };
     CO_API std::ostream& operator << ( std::ostream&, const Object& );
 
     template< class T > inline bool
     Object::send( NodePtr node, ObjectPacket& packet, const std::vector<T>& v )
     {
-        EQASSERT( isAttached() );
+        LBASSERT( isAttached() );
         packet.objectID  = _id;
         return node->send( packet, v );
     }

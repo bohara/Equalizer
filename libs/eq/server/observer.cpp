@@ -1,6 +1,6 @@
 
-/* Copyright (c) 2009-2011, Stefan Eilemann <eile@equalizergraphics.com>
- * Copyright (c) 2010, Cedric Stalder <cedric.stalder@gmail.com>
+/* Copyright (c) 2009-2012, Stefan Eilemann <eile@equalizergraphics.com>
+ *                    2010, Cedric Stalder <cedric.stalder@gmail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -69,20 +69,20 @@ void Observer::deserialize( co::DataIStream& is, const uint64_t dirtyBits )
 ServerPtr Observer::getServer() 
 {
     Config* config = getConfig();
-    EQASSERT( config );
+    LBASSERT( config );
     return ( config ? config->getServer() : 0 );
 }
 
 void Observer::addView( View* view )
 {
-    EQASSERT( stde::find( _views, view ) == _views.end( ));
+    LBASSERT( stde::find( _views, view ) == _views.end( ));
     _views.push_back( view );
 }
 
 void Observer::removeView( View* view )
 {
     ViewsIter i = stde::find( _views, view );
-    EQASSERT( i != _views.end( ));
+    LBASSERT( i != _views.end( ));
     if( i != _views.end( ))
         _views.erase( i );
 }
@@ -101,9 +101,9 @@ void Observer::_updateEyes()
 
     // eye_world = (+-eye_base/2., 0, 0 ) x head_matrix
     // OPT: don't use vector operator* due to possible simplification
-    const int32_t cyclop = co::base::getIndexOfLastBit( eq::EYE_CYCLOP );
-    const int32_t right  = co::base::getIndexOfLastBit( eq::EYE_RIGHT );
-    const int32_t left   = co::base::getIndexOfLastBit( eq::EYE_LEFT );
+    const int32_t cyclop = lunchbox::getIndexOfLastBit( EYE_CYCLOP );
+    const int32_t right  = lunchbox::getIndexOfLastBit( EYE_RIGHT );
+    const int32_t left   = lunchbox::getIndexOfLastBit( EYE_LEFT );
 
     _eyes[ cyclop ].x() = head.at( 0, 3 );
     _eyes[ cyclop ].y() = head.at( 1, 3 );
@@ -120,7 +120,7 @@ void Observer::_updateEyes()
     _eyes[ right ].z() = ( eyeBase_2 * head.at( 2, 0 ) + head.at( 2, 3 ));
     _eyes[ right ]    /= ( eyeBase_2 * head.at( 3, 0 ) + head.at( 3, 3 ));
 
-    EQVERB << "Eye position: " << _eyes[ cyclop ] << std::endl;
+    LBVERB << "Eye position: " << _eyes[ cyclop ] << std::endl;
 }
 
 void Observer::_updateViews()

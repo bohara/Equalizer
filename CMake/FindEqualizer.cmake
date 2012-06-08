@@ -69,32 +69,14 @@
 #  Output variables of the form EQUALIZER_FOO
 #
 
-# Find Collage
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/FindEqualizer)
+
 set(_eq_required)
 if(Equalizer_FIND_REQUIRED)
   set(_eq_required REQUIRED)
 endif()
-if(Equalizer_FIND_VERSION)
-  # Matching Collage versions
-  set(_eq_coVersion_ "0.5.0")
-  set(_eq_coVersion_1.3.1 "0.5.0")
-  set(_eq_coVersion_1.3.0 "0.5.0")
-  set(_eq_coVersion_1.2.0 "0.4.8")
-  set(_eq_coVersion_1.1.7 "0.4.7")
-  set(_eq_coVersion_1.1.6 "0.4.1")
-  set(_eq_coVersion_1.1.5 "0.4.1")
-  set(_eq_coVersion_1.1.4 "0.4.1")
-  set(_eq_coVersion_1.1.3 "0.4.0")
-  set(_eq_coVersion_1.1.2 "0.4.0")
-  set(_eq_coVersion_1.1.1 "0.4.0")
-  set(_eq_coVersion_1.1.0 "0.4.0")
-  set(_eq_coVersion_1.0.2 "0.3.1")
-  set(_eq_coVersion_1.0.1 "0.3.1")
-  set(_eq_coVersion_1.0.0 "0.3.0")
-  find_package(Collage "${_eq_coVersion_${Equalizer_FIND_VERSION}}"
-               ${_eq_required})
-else()
-  find_package(Collage ${_eq_required})
+if(Equalizer_FIND_QUIETLY)
+  set(_eq_quiet QUIET)
 endif()
 
 # find and parse eq/client/version.h [new location]
@@ -118,9 +100,13 @@ else() # find old one
 endif()
 
 if(Equalizer_FIND_REQUIRED)
-    set(_eq_version_output_type FATAL_ERROR)
+  set(_eq_version_output_type FATAL_ERROR)
+  set(_eq_output 1)
 else()
-    set(_eq_version_output_type STATUS)
+  set(_eq_version_output_type STATUS)
+  if(NOT Equalizer_FIND_QUIETLY)
+    set(_eq_output 1)
+  endif()
 endif()
 
 if(_eq_Version_file)
@@ -147,8 +133,10 @@ if(_eq_Version_file)
     CACHE INTERNAL "The version of Equalizer which was detected")
 else()
   set(_eq_EPIC_FAIL TRUE)
-  message(${_eq_version_output_type}
-    "Can't find Equalizer header file version.h.")
+  if(_eq_output)
+    message(${_eq_version_output_type}
+      "Can't find Equalizer header file version.h.")
+  endif()
 endif()
 
 # Version checking
@@ -209,6 +197,54 @@ else()
   endif()
   find_package_handle_standard_args(Equalizer DEFAULT_MSG
                                     _eq_LIBRARY _eq_INCLUDE_DIR)
+  # Matching Collage versions
+  set(_eq_coVersion_1.3.2 "0.5.2")
+  set(_eq_coVersion_1.3.1 "0.5.1")
+  set(_eq_coVersion_1.3.0 "0.5.0")
+  set(_eq_coVersion_1.2.1 "0.4.8")
+  set(_eq_coVersion_1.2.0 "0.4.8")
+  set(_eq_coVersion_1.1.7 "0.4.7")
+  set(_eq_coVersion_1.1.6 "0.4.1")
+  set(_eq_coVersion_1.1.5 "0.4.1")
+  set(_eq_coVersion_1.1.4 "0.4.1")
+  set(_eq_coVersion_1.1.3 "0.4.0")
+  set(_eq_coVersion_1.1.2 "0.4.0")
+  set(_eq_coVersion_1.1.1 "0.4.0")
+  set(_eq_coVersion_1.1.0 "0.4.0")
+  set(_eq_coVersion_1.0.2 "0.3.1")
+  set(_eq_coVersion_1.0.1 "0.3.1")
+  set(_eq_coVersion_1.0.0 "0.3.0")
+  find_package(Collage "${_eq_coVersion_${EQUALIZER_VERSION}}" EXACT
+               ${_eq_required} ${_eq_quiet})
+  if(NOT COLLAGE_FOUND)
+    set(_eq_EPIC_FAIL 1)
+  endif()
+  if(NOT _eq_EPIC_FAIL)
+    # GLEW_MX
+    set(TEST_SRC ${CMAKE_BINARY_DIR}/glewmx_test.cpp)
+    file(WRITE ${TEST_SRC}
+      "#include <eq/client/defines.h>\n"
+      "#ifndef EQ_GLEW_INTERNAL\n"
+      "#  error Need external GLEW_MX\n"
+      "#endif\n"
+      "int main(int argc, char* argv[]){}\n"
+      )
+
+    try_compile(_glew_mx_internal ${CMAKE_BINARY_DIR}/glewmx_test ${TEST_SRC}
+      CMAKE_FLAGS "-DINCLUDE_DIRECTORIES:STRING=${_eq_INCLUDE_DIR}"
+                  "-DLINK_LIBRARIES:STRING=${_eq_LIBRARY}"
+      OUTPUT_VARIABLE out
+    )
+    if(_glew_mx_internal)
+      set(GLEW_MX_INCLUDE_DIRS)
+      set(GLEW_MX_LIBRARIES)
+    else()
+      find_package(GLEW_MX ${_eq_required} ${_eq_quiet})
+      if(NOT GLEW_MX_FOUND)
+        set(_eq_EPIC_FAIL 1)
+      endif()
+    endif()
+  endif()
 endif()
 
 if(_eq_EPIC_FAIL OR NOT COLLAGE_FOUND)
@@ -225,8 +261,8 @@ else()
   endif()
 endif()
 
-set(EQUALIZER_INCLUDE_DIRS ${_eq_INCLUDE_DIR})
-set(EQUALIZER_LIBRARIES ${_eq_LIBRARY} ${COLLAGE_LIBRARIES})
+set(EQUALIZER_INCLUDE_DIRS ${_eq_INCLUDE_DIR} ${GLEW_MX_INCLUDE_DIRS})
+set(EQUALIZER_LIBRARIES ${_eq_LIBRARY} ${COLLAGE_LIBRARIES} ${GLEW_MX_LIBRARIES})
 if(EQUALIZER_VERSION VERSION_GREATER 1.0)
   set(EQUALIZER_LIBRARIES ${EQUALIZER_LIBRARIES} ${_eq_fabric_LIBRARY})
 endif()

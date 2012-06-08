@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2009-2011, Stefan Eilemann <eile@equalizergraphics.com> 
+/* Copyright (c) 2009-2012, Stefan Eilemann <eile@equalizergraphics.com> 
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -27,7 +27,7 @@
 
 #include <eq/fabric/viewport.h>
 #include <eq/fabric/zoom.h>
-#include <co/base/debug.h>
+#include <lunchbox/debug.h>
 
 namespace eq
 {
@@ -72,7 +72,7 @@ private:
 
 MonitorEqualizer::MonitorEqualizer()
 {
-    EQINFO << "New monitor equalizer @" << (void*)this << std::endl;
+    LBINFO << "New monitor equalizer @" << (void*)this << std::endl;
 }
 
 MonitorEqualizer::MonitorEqualizer( const MonitorEqualizer& from )
@@ -82,7 +82,7 @@ MonitorEqualizer::MonitorEqualizer( const MonitorEqualizer& from )
 MonitorEqualizer::~MonitorEqualizer()
 {
     attach( 0 );
-    EQINFO << "Delete monitor equalizer @" << (void*)this << std::endl;
+    LBINFO << "Delete monitor equalizer @" << (void*)this << std::endl;
 }
 
 void MonitorEqualizer::attach( Compound* compound )
@@ -147,9 +147,9 @@ void MonitorEqualizer::_updateZoomAndOffset()
 
     const Frames& inputFrames( compound->getInputFrames( ));
     const size_t size( inputFrames.size( ));
-    EQASSERTINFO( size == _outputFrames.size(), 
+    LBASSERTINFO( size == _outputFrames.size(), 
                   size << " != " << _outputFrames.size( ));
-    EQASSERT( size == _viewports.size( ));
+    LBASSERT( size == _viewports.size( ));
 
     for( size_t i = 0; i < size; ++i )
     {
@@ -164,7 +164,7 @@ void MonitorEqualizer::_updateZoomAndOffset()
         // compute and apply input frame offset
         const int32_t offsetX = int32_t( float( pvp.w ) * viewport.x );
         const int32_t offsetY = int32_t( float( pvp.h ) * viewport.y );
-        frame->setOffset( Vector2i( offsetX, offsetY ));
+        frame->setNativeOffset( Vector2i( offsetX, offsetY ));
         
         // compute and apply output frame zoom
         const int32_t width   = int32_t( float( pvp.w ) * viewport.w );
@@ -175,7 +175,7 @@ void MonitorEqualizer::_updateZoomAndOffset()
         const float factorH = float( height ) / float( srcPVP.h );
             
         const Zoom newZoom( factorW, factorH );
-        outputFrame->setZoom( newZoom );
+        outputFrame->setNativeZoom( newZoom );
     }
 }
 

@@ -60,7 +60,7 @@ namespace eqPly
 Channel::Channel( eq::Window* parent )
         : eq::Channel( parent )
         , _model(0)
-        , _modelID( co::base::UUID::ZERO )
+        , _modelID( lunchbox::UUID::ZERO )
         , _frameRestart( 0 )
 {
 }
@@ -72,13 +72,7 @@ bool Channel::configInit( const eq::uint128_t& initID )
 
     setNearFar( 0.1f, 10.0f );
     _model = 0;
-    _modelID = co::base::UUID::ZERO;
-
-    ConfigEvent event;
-    event.data.originator = getPipe()->getID();
-    event.data.type = ConfigEvent::PIPE;
-
-    getConfig()->sendEvent( event );
+    _modelID = lunchbox::UUID::ZERO;
     return true;
 }
 
@@ -102,7 +96,7 @@ void Channel::frameClear( const eq::uint128_t& frameID )
     resetRegions();
 
     const FrameData& frameData = _getFrameData();
-    const int32_t eyeIndex = co::base::getIndexOfLastBit( getEye() );
+    const int32_t eyeIndex = lunchbox::getIndexOfLastBit( getEye() );
     if( _isDone() && !_accum[ eyeIndex ].transfer )
         return;
 
@@ -212,8 +206,8 @@ void Channel::_frameDraw( const eq::uint128_t& frameID )
     }
 
     state.setFrustumCulling( true );
-    Accum& accum = _accum[ co::base::getIndexOfLastBit( getEye()) ];
-    accum.stepsDone = EQ_MAX( accum.stepsDone, 
+    Accum& accum = _accum[ lunchbox::getIndexOfLastBit( getEye()) ];
+    accum.stepsDone = LB_MAX( accum.stepsDone, 
                               getSubPixel().size * getPeriod( ));
     accum.transfer = true;
 }
@@ -226,7 +220,7 @@ void Channel::frameAssemble( const eq::uint128_t& frameID )
     if( _isDone( ))
         return;
 
-    Accum& accum = _accum[ co::base::getIndexOfLastBit( getEye()) ];
+    Accum& accum = _accum[ lunchbox::getIndexOfLastBit( getEye()) ];
 
     if( getPixelViewport() != _currentPVP )
     {
@@ -234,7 +228,7 @@ void Channel::frameAssemble( const eq::uint128_t& frameID )
 
         if( accum.buffer && !accum.buffer->usesFBO( ))
         {
-            EQWARN << "Current viewport different from view viewport, "
+            LBWARN << "Current viewport different from view viewport, "
                    << "idle anti-aliasing not implemented." << std::endl;
             accum.step = 0;
         }
@@ -255,7 +249,7 @@ void Channel::frameAssemble( const eq::uint128_t& frameID )
         if( curSubPixel != eq::SubPixel::ALL )
             accum.transfer = false;
 
-        accum.stepsDone = EQ_MAX( accum.stepsDone, 
+        accum.stepsDone = LB_MAX( accum.stepsDone, 
                                   frame->getSubPixel().size*frame->getPeriod( ));
     }
 
@@ -269,7 +263,7 @@ void Channel::frameAssemble( const eq::uint128_t& frameID )
     }
     catch( const co::Exception& e )
     {
-        EQWARN << e.what() << std::endl;
+        LBWARN << e.what() << std::endl;
     }
 
     resetAssemblyState();
@@ -353,7 +347,7 @@ void Channel::frameViewFinish( const eq::uint128_t& frameID )
     applyBuffer();
 
     const FrameData& frameData = _getFrameData();
-    Accum& accum = _accum[ co::base::getIndexOfLastBit( getEye()) ];
+    Accum& accum = _accum[ lunchbox::getIndexOfLastBit( getEye()) ];
 
     if( accum.buffer )
     {
@@ -394,7 +388,7 @@ void Channel::frameViewFinish( const eq::uint128_t& frameID )
     {
         event.steps = 0;
         for( size_t i = 0; i < eq::NUM_EYES; ++i )
-            event.steps = EQ_MAX( event.steps, _accum[i].step );
+            event.steps = LB_MAX( event.steps, _accum[i].step );
     }
     else
     {
@@ -427,7 +421,7 @@ bool Channel::_isDone() const
         return false;
 
     const eq::SubPixel& subpixel = getSubPixel();
-    const Accum& accum = _accum[ co::base::getIndexOfLastBit( getEye()) ];
+    const Accum& accum = _accum[ lunchbox::getIndexOfLastBit( getEye()) ];
     return int32_t( subpixel.index ) >= accum.step;
 }
 
@@ -449,7 +443,7 @@ void Channel::_initJitter()
         return;
 
     // ready for the next FSAA
-    Accum& accum = _accum[ co::base::getIndexOfLastBit( getEye()) ];
+    Accum& accum = _accum[ lunchbox::getIndexOfLastBit( getEye()) ];
     if( accum.buffer )
         accum.buffer->clear();
     accum.step = idleSteps;
@@ -462,7 +456,7 @@ bool Channel::_initAccum()
         return true;
 
     const eq::Eye eye = getEye();
-    Accum& accum = _accum[ co::base::getIndexOfLastBit( eye ) ];
+    Accum& accum = _accum[ lunchbox::getIndexOfLastBit( eye ) ];
 
     if( accum.buffer ) // already done
         return true;
@@ -477,7 +471,7 @@ bool Channel::_initAccum()
         {
             if( _accum[ i ].buffer )
             {
-                EQWARN << "glAccum-based accumulation does not support "
+                LBWARN << "glAccum-based accumulation does not support "
                        << "stereo, disabling idle anti-aliasing."
                        << std::endl;
                 for( size_t j = 0; j < eq::NUM_EYES; ++j )
@@ -496,12 +490,12 @@ bool Channel::_initAccum()
     // set up accumulation buffer
     accum.buffer = new eq::util::Accum( glewGetContext( ));
     const eq::PixelViewport& pvp = getPixelViewport();
-    EQASSERT( pvp.isValid( ));
+    LBASSERT( pvp.isValid( ));
 
     if( !accum.buffer->init( pvp, getWindow()->getColorFormat( )) ||
         accum.buffer->getMaxSteps() < 256 )
     {
-        EQWARN <<"Accumulation buffer initialization failed, "
+        LBWARN <<"Accumulation buffer initialization failed, "
                << "idle AA not available." << std::endl;
         delete accum.buffer;
         accum.buffer = 0;
@@ -510,7 +504,7 @@ bool Channel::_initAccum()
     }
 
     // else
-    EQVERB << "Initialized "
+    LBVERB << "Initialized "
            << (accum.buffer->usesFBO() ? "FBO accum" : "glAccum")
            << " buffer for " << getName() << " " << getEye() 
            << std::endl;
@@ -527,7 +521,7 @@ bool Channel::stopRendering() const
 eq::Vector2f Channel::getJitter() const
 {
     const FrameData& frameData = _getFrameData();
-    const Accum& accum = _accum[ co::base::getIndexOfLastBit( getEye()) ];
+    const Accum& accum = _accum[ lunchbox::getIndexOfLastBit( getEye()) ];
 
     if( !frameData.isIdle() || accum.step <= 0 )
         return eq::Channel::getJitter();
@@ -554,7 +548,7 @@ eq::Vector2f Channel::getJitter() const
     const float subpixel_h = pixel_h / sampleSize;
 
     // Sample value randomly computed within the subpixel
-    co::base::RNG rng;
+    lunchbox::RNG rng;
     const eq::Pixel& pixel = getPixel();
 
     const float i = ( rng.get< float >() * subpixel_w +
@@ -587,7 +581,7 @@ eq::Vector2i Channel::_getJitterStep() const
     if( totalSteps != 256 )
         return eq::Vector2i::ZERO;
 
-    const Accum& accum = _accum[ co::base::getIndexOfLastBit( getEye()) ];
+    const Accum& accum = _accum[ lunchbox::getIndexOfLastBit( getEye()) ];
     const uint32_t subset = totalSteps / getSubPixel().size;
     const uint32_t index = ( accum.step * _primes[ channelID % 100 ] )%subset +
                            ( channelID * subset );
@@ -603,10 +597,10 @@ const Model* Channel::_getModel()
     Config* config = static_cast< Config* >( getConfig( ));
     const View* view = static_cast< const View* >( getView( ));
     const FrameData& frameData = _getFrameData();
-    EQASSERT( !view || dynamic_cast< const View* >( getView( )));
+    LBASSERT( !view || dynamic_cast< const View* >( getView( )));
 
     eq::uint128_t id = view ? view->getModelID() : frameData.getModelID();
-    if( id == co::base::UUID::ZERO )
+    if( id == lunchbox::UUID::ZERO )
         id = frameData.getModelID();
     if( id != _modelID )
     {
@@ -848,7 +842,7 @@ void Channel::_updateNearFar( const mesh::BoundingSphere& boundingSphere )
 
     if( useOrtho( ))
     {
-        EQASSERTINFO( fabs( farPoint.z() - nearPoint.z() ) > 
+        LBASSERTINFO( fabs( farPoint.z() - nearPoint.z() ) > 
                       std::numeric_limits< float >::epsilon(),
                       nearPoint << " == " << farPoint );
         setNearFar( -nearPoint.z(), -farPoint.z() );
@@ -859,11 +853,11 @@ void Channel::_updateNearFar( const mesh::BoundingSphere& boundingSphere )
         const eq::Frustumf& frustum = getFrustum();
         const float width  = fabs( frustum.right() - frustum.left() );
         const float height = fabs( frustum.top() - frustum.bottom() );
-        const float size   = EQ_MIN( width, height );
+        const float size   = LB_MIN( width, height );
         const float minNear = frustum.near_plane() / size * .001f;
 
-        const float zNear = EQ_MAX( minNear, -nearPoint.z() );
-        const float zFar  = EQ_MAX( zNear * 2.f, -farPoint.z() );
+        const float zNear = LB_MAX( minNear, -nearPoint.z() );
+        const float zFar  = LB_MAX( zNear * 2.f, -farPoint.z() );
 
         setNearFar( zNear, zFar );
     }

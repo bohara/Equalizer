@@ -76,6 +76,19 @@ namespace co
         const Nodes* nodes;
     };
 
+    struct ObjectMaxVersionPacket : public ObjectPacket
+    {
+        ObjectMaxVersionPacket( const uint64_t version_,
+                                const uint32_t slaveInstanceID )
+                : version( version_ ), slaveID( slaveInstanceID )
+            {
+                command = CMD_OBJECT_MAX_VERSION;
+                size = sizeof( ObjectMaxVersionPacket );
+            }
+        const uint64_t version;
+        const uint32_t slaveID;
+    };
+
     struct ObjectDataPacket : public ObjectPacket
     {
         ObjectDataPacket()
@@ -94,7 +107,7 @@ namespace co
         uint32_t compressorName;
         uint32_t nChunks;
         uint32_t fill;
-        EQ_ALIGN8( uint64_t last ); // pad and align to multiple-of-eight
+        LB_ALIGN8( uint64_t last ); // pad and align to multiple-of-eight
     };
 
     struct ObjectInstancePacket : public ObjectDataPacket
@@ -114,7 +127,7 @@ namespace co
         const NodeID nodeID;
         const uint32_t masterInstanceID;
         const uint32_t fill;
-        EQ_ALIGN8( uint8_t data[8] );
+        LB_ALIGN8( uint8_t data[8] );
     };
 
     struct ObjectDeltaPacket : public ObjectDataPacket
@@ -125,7 +138,7 @@ namespace co
                 size       = sizeof( ObjectDeltaPacket ); 
                 instanceID = EQ_INSTANCE_NONE; // multicasted
             }
-        EQ_ALIGN8( uint8_t data[8] );
+        LB_ALIGN8( uint8_t data[8] );
     };
 
     struct ObjectSlaveDeltaPacket : public ObjectDataPacket
@@ -136,8 +149,8 @@ namespace co
                 size       = sizeof( ObjectSlaveDeltaPacket ); 
             }
 
-        base::UUID commit;
-        EQ_ALIGN8( uint8_t data[8] );
+        UUID commit;
+        LB_ALIGN8( uint8_t data[8] );
     };
 
     //------------------------------------------------------------

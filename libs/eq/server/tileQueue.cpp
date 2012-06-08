@@ -1,6 +1,6 @@
 
-/* Copyright (c) 2011, Stefan Eilemann <eile@eyescale.ch>
- *               2011, Daniel Nachbaur <danielnachbaur@googlemail.com>
+/* Copyright (c) 2011-2012, Stefan Eilemann <eile@eyescale.ch>
+ *                    2011, Daniel Nachbaur <danielnachbaur@googlemail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -20,7 +20,6 @@
 
 #include <co/dataIStream.h>
 #include <co/dataOStream.h>
-
 
 namespace eq
 {
@@ -52,10 +51,10 @@ TileQueue::~TileQueue()
     _compound = 0;
 }
 
-void TileQueue::addTile( const TileTaskPacket& tile, fabric::Eye eye )
+void TileQueue::addTile( const TileTaskPacket& tile, const fabric::Eye eye )
 {
-    uint32_t index = co::base::getIndexOfLastBit(eye);
-    EQASSERT( index < NUM_EYES );
+    uint32_t index = lunchbox::getIndexOfLastBit(eye);
+    LBASSERT( index < NUM_EYES );
     _queueMaster[index]->_queue.push( tile );
 }
 
@@ -63,7 +62,7 @@ void TileQueue::cycleData( const uint32_t frameNumber, const Compound* compound)
 {
     for( unsigned i = 0; i < NUM_EYES; ++i )
     {
-        if( !compound->isInheritActive( (eq::Eye)(1<<i) ))// eye pass not used
+        if( !compound->isInheritActive( Eye( 1<<i )))// eye pass not used
         {
             _queueMaster[i] = 0;
             continue;
@@ -98,7 +97,7 @@ void TileQueue::setOutputQueue( TileQueue* queue, const Compound* compound )
     for( unsigned i = 0; i < NUM_EYES; ++i )
     {
         // eye pass not used && no output frame for eye pass
-        if( compound->isInheritActive( (eq::Eye)(1<<i) ) )
+        if( compound->isInheritActive( Eye( 1<<i )))
             _outputQueue[i] =queue;
     }
 }
@@ -134,13 +133,13 @@ void TileQueue::unsetData()
     }
 }
 
-const UUID TileQueue::getQueueMasterID( fabric::Eye eye ) const
+const UUID TileQueue::getQueueMasterID( const Eye eye ) const
 {
-    uint32_t index = co::base::getIndexOfLastBit(eye);
+    uint32_t index = lunchbox::getIndexOfLastBit(eye);
     LatencyQueue* queue = _queueMaster[ index ];
     if ( queue )
         return queue->_queue.getID();
-    return co::base::UUID::ZERO;
+    return UUID::ZERO;
 }
 
 std::ostream& operator << ( std::ostream& os, const TileQueue* tileQueue )
@@ -148,8 +147,8 @@ std::ostream& operator << ( std::ostream& os, const TileQueue* tileQueue )
     if( !tileQueue )
         return os;
     
-    os << co::base::disableFlush << "tiles" << std::endl;
-    os << "{" << std::endl << co::base::indent;
+    os << lunchbox::disableFlush << "tiles" << std::endl;
+    os << "{" << std::endl << lunchbox::indent;
 
     const std::string& name = tileQueue->getName();
     os << "name      \"" << name << "\"" << std::endl;
@@ -158,7 +157,7 @@ std::ostream& operator << ( std::ostream& os, const TileQueue* tileQueue )
     if( size != Vector2i::ZERO )
         os << "size      " << size << std::endl;
 
-    os << co::base::exdent << "}" << std::endl << co::base::enableFlush;
+    os << lunchbox::exdent << "}" << std::endl << lunchbox::enableFlush;
     return os;
 }
 

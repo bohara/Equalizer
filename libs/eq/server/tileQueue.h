@@ -1,6 +1,6 @@
 
-/* Copyright (c) 2011, Stefan Eilemann <eile@eyescale.ch>
- *               2011, Daniel Nachbaur <danielnachbaur@googlemail.com>
+/* Copyright (c) 2011-2012, Stefan Eilemann <eile@eyescale.ch>
+ *                    2011, Daniel Nachbaur <danielnachbaur@googlemail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -22,7 +22,7 @@
 #include "compound.h"
 #include "types.h"
 
-#include <co/base/bitOperation.h> // function getIndexOfLastBit
+#include <lunchbox/bitOperation.h> // function getIndexOfLastBit
 #include <co/queueMaster.h>
 
 namespace eq
@@ -45,7 +45,7 @@ namespace server
          */
         //@{
         void setCompound( Compound* compound )
-            { EQASSERT( !_compound ); _compound = compound; }
+            { LBASSERT( !_compound ); _compound = compound; }
         Compound* getCompound() const { return _compound; }
         Channel* getChannel() const
             { return _compound ? _compound->getChannel() :0; }
@@ -54,8 +54,6 @@ namespace server
         void setName( const std::string& name ) { _name = name; }
         const std::string& getName() const      { return _name; }
 
-        co::ObjectVersion getDataVersion( const Eye eye ) const;
-
         /** Set the size of the tiles. */
         void setTileSize( const Vector2i& size ) { _size = size; }
 
@@ -63,7 +61,7 @@ namespace server
         const Vector2i& getTileSize() const { return _size; }
 
         /** Add a tile to the queue. */
-        void addTile( const TileTaskPacket& tile, fabric::Eye eye );
+        void addTile( const TileTaskPacket& tile, const Eye eye );
 
         /** 
          * Cycle the current tile queue.
@@ -76,8 +74,8 @@ namespace server
         void cycleData( const uint32_t frameNumber, const Compound* compound );
 
         void setOutputQueue( TileQueue* queue, const Compound* compound );
-        const TileQueue* getOutputQueue( const eq::Eye eye ) const
-            { return _outputQueue[ co::base::getIndexOfLastBit( eye ) ]; }
+        const TileQueue* getOutputQueue( const Eye eye ) const
+            { return _outputQueue[ lunchbox::getIndexOfLastBit( eye ) ]; }
 
         /**
          * @name Operations
@@ -90,7 +88,7 @@ namespace server
         void flush();
         //@}
 
-        const UUID getQueueMasterID( fabric::Eye eye ) const;
+        const UUID getQueueMasterID( const Eye eye ) const;
 
     protected:
         EQSERVER_API virtual ChangeType getChangeType() const 
@@ -119,10 +117,10 @@ namespace server
         std::deque< LatencyQueue* > _queues;
 
         /** the currently used tile queues */
-        LatencyQueue* _queueMaster[ eq::NUM_EYES ];
+        LatencyQueue* _queueMaster[ NUM_EYES ];
 
         /** The current output queue. */
-        TileQueue* _outputQueue[ eq::NUM_EYES ];
+        TileQueue* _outputQueue[ NUM_EYES ];
     };
 
     std::ostream& operator << ( std::ostream& os, const TileQueue* frame );

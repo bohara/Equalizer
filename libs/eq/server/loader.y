@@ -42,8 +42,8 @@
 #include "window.h"
 
 #include <eq/fabric/paths.h>
-#include <co/base/os.h>
-#include <co/base/file.h>
+#include <lunchbox/os.h>
+#include <lunchbox/file.h>
 
 #include <locale.h>
 #include <string>
@@ -83,7 +83,7 @@
     }
     }
 
-    using namespace co::base;
+    using namespace lunchbox;
     using namespace eq::loader;
 
     int eqLoader_lex();
@@ -396,7 +396,7 @@ global:
      }
      | EQTOKEN_NODE_IATTR_HINT_STATISTICS IATTR
      {
-         EQWARN << "Ignoring deprecated attribute Node::IATTR_HINT_STATISTICS"
+         LBWARN << "Ignoring deprecated attribute Node::IATTR_HINT_STATISTICS"
                 << std::endl;
      }
      | EQTOKEN_PIPE_IATTR_HINT_THREAD IATTR
@@ -516,7 +516,7 @@ global:
      }
      | EQTOKEN_COMPOUND_IATTR_UPDATE_FOV IATTR
      {
-         EQWARN << "ignoring removed attribute EQ_COMPOUND_IATTR_UPDATE_FOV"
+         LBWARN << "ignoring removed attribute EQ_COMPOUND_IATTR_UPDATE_FOV"
                 << std::endl;
      }
 
@@ -582,7 +582,7 @@ renderNode: EQTOKEN_NODE '{' {
 appNode: EQTOKEN_APPNODE '{' 
             {
                 node = config->findApplicationNode();
-                EQASSERT( node );
+                LBASSERT( node );
             }
             nodeFields
             '}' { node = 0; }
@@ -623,7 +623,7 @@ nodeAttribute:
         { node->setIAttribute( eq::server::Node::IATTR_LAUNCH_TIMEOUT, $2 ); }
     | EQTOKEN_HINT_STATISTICS IATTR
         {
-            EQWARN
+            LBWARN
                 << "Ignoring deprecated attribute Node::IATTR_HINT_STATISTICS"
                 << std::endl;
         }
@@ -923,7 +923,7 @@ compoundField:
         compoundTasks ']'
     | EQTOKEN_EYE  '['   { eqCompound->setEyes( eq::fabric::EYE_UNDEFINED );}
         compoundEyes  ']'
-    | EQTOKEN_BUFFER '[' { flags = eq::Frame::BUFFER_NONE; }
+    | EQTOKEN_BUFFER '[' { flags = eq::fabric::Frame::BUFFER_NONE; }
         buffers ']' { eqCompound->setBuffers( flags ); flags = 0; }
     | EQTOKEN_VIEWPORT viewport
         { eqCompound->setViewport( eq::Viewport( $2[0], $2[1], $2[2], $2[3] ));}
@@ -1041,8 +1041,8 @@ compoundEye:
 
 buffers: /*null*/ | buffers buffer
 buffer:
-    EQTOKEN_COLOR    { flags |= eq::Frame::BUFFER_COLOR; }
-    | EQTOKEN_DEPTH  { flags |= eq::Frame::BUFFER_DEPTH; }
+    EQTOKEN_COLOR    { flags |= eq::fabric::Frame::BUFFER_COLOR; }
+    | EQTOKEN_DEPTH  { flags |= eq::fabric::Frame::BUFFER_DEPTH; }
     
 drawables:  /*null*/ | drawables drawable
 drawable:  
@@ -1083,7 +1083,7 @@ projectionField:
 loadBalancer: 
     EQTOKEN_LOADBALANCER '{' loadBalancerFields '}'
     {
-        EQWARN << "Deprecated loadBalancer specification, "
+        LBWARN << "Deprecated loadBalancer specification, "
                << " use new ???_equalizer grammar" << std::endl;
 
         dfrEqualizer = 0;
@@ -1259,14 +1259,14 @@ frameField:
     | EQTOKEN_TYPE frameType
     | EQTOKEN_VIEWPORT viewport
         { frame->setViewport(eq::Viewport( $2[0], $2[1], $2[2], $2[3])); }
-    | EQTOKEN_BUFFER '[' { flags = eq::Frame::BUFFER_NONE; }
+    | EQTOKEN_BUFFER '[' { flags = eq::fabric::Frame::BUFFER_NONE; }
         buffers ']' { frame->setBuffers( flags ); flags = 0; }
     | EQTOKEN_ZOOM '[' FLOAT FLOAT ']'
-        { frame->setZoom( eq::Zoom( $3, $4 )); }
+        { frame->setNativeZoom( eq::Zoom( $3, $4 )); }
 
 frameType: 
-    EQTOKEN_TEXTURE { frame->setType( eq::Frame::TYPE_TEXTURE ); }
-    | EQTOKEN_MEMORY { frame->setType( eq::Frame::TYPE_MEMORY ); }
+    EQTOKEN_TEXTURE { frame->setType( eq::fabric::Frame::TYPE_TEXTURE ); }
+    | EQTOKEN_MEMORY { frame->setType( eq::fabric::Frame::TYPE_MEMORY ); }
 
 inputFrame: EQTOKEN_OUTPUTTILES '{' { tileQueue = new eq::server::TileQueue; }
     tileQueueFields '}'
@@ -1297,7 +1297,7 @@ compoundAttribute:
         { eqCompound->setIAttribute( 
                 eq::server::Compound::IATTR_STEREO_ANAGLYPH_RIGHT_MASK, $2 ); }
     | EQTOKEN_UPDATE_FOV IATTR
-        { EQWARN << "ignoring removed attribute update_FOV" << std::endl; }
+        { LBWARN << "ignoring removed attribute update_FOV" << std::endl; }
 
 viewport: '[' FLOAT FLOAT FLOAT FLOAT ']'
      { 
@@ -1377,7 +1377,7 @@ ServerPtr Loader::loadFile( const std::string& filename )
 
     if( !yyin )
     {
-        EQERROR << "Can't open config file " << filename << std::endl;
+        LBERROR << "Can't open config file " << filename << std::endl;
         return 0;
     }
 
@@ -1401,7 +1401,7 @@ void Loader::_parseString( const char* data )
 
 void Loader::_parse()
 {
-    EQASSERTINFO( !eq::loader::loader, "Config file loader is not reentrant" );
+    LBASSERTINFO( !eq::loader::loader, "Config file loader is not reentrant" );
     eq::loader::loader = this;
 
     loader::server = 0;

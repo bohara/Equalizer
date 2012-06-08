@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2010-2011, Stefan Eilemann <eile@eyescale.ch>
+/* Copyright (c) 2010-2012, Stefan Eilemann <eile@eyescale.ch>
  *                    2010, Cedric Stalder <cedric.stalder@gmail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -23,6 +23,9 @@
 #include "log.h"
 #include "paths.h"
 
+#include <co/dataIStream.h>
+#include <co/dataOStream.h>
+
 namespace eq
 {
 namespace fabric
@@ -45,17 +48,17 @@ Node< C, N, P, V >::Node( C* parent )
         , _isAppNode( false )
 {
     parent->_addNode( static_cast< N* >( this ) );
-    EQLOG( LOG_INIT ) << "New " << co::base::className( this ) << std::endl;
+    LBLOG( LOG_INIT ) << "New " << lunchbox::className( this ) << std::endl;
 }
 
 template< class C, class N, class P, class V >
 Node< C, N, P, V >::~Node()
 {
-    EQLOG( LOG_INIT ) << "Delete " << co::base::className( this ) << std::endl;
+    LBLOG( LOG_INIT ) << "Delete " << lunchbox::className( this ) << std::endl;
     while( !_pipes.empty() )
     {
         P* pipe = _pipes.back();
-        EQASSERT( pipe->getNode() == static_cast< N* >( this ) );
+        LBASSERT( pipe->getNode() == static_cast< N* >( this ) );
         _removePipe( pipe );
         delete pipe;
     }
@@ -125,7 +128,7 @@ Node< C, N, P, V >::deserialize( co::DataIStream& is, const uint64_t dirtyBits)
                 Pipes result;
                 is.deserializeChildren( this, _pipes, result );
                 _pipes.swap( result );
-                EQASSERT( _pipes.size() == result.size( ));
+                LBASSERT( _pipes.size() == result.size( ));
             }
             else // consume unused ObjectVersions
             {
@@ -154,11 +157,11 @@ void Node< C, N, P, V >::notifyDetach()
         P* pipe = _pipes.back();
         if( !pipe->isAttached( ))
         {
-            EQASSERT( isMaster( ));
+            LBASSERT( isMaster( ));
             return;
         }
 
-        EQASSERT( !isMaster( ));
+        LBASSERT( !isMaster( ));
         getLocalNode()->unmapObject( pipe );
         _removePipe( pipe );
         _config->getServer()->getNodeFactory()->releasePipe( pipe );
@@ -239,12 +242,12 @@ template< class C, class N, class P, class V >
 NodePath Node< C, N, P, V >::getPath() const
 {
     const C* config = static_cast< const N* >( this )->getConfig( );
-    EQASSERT( config );
+    LBASSERT( config );
     
     const typename std::vector< N* >& nodes = config->getNodes();
     typename std::vector< N* >::const_iterator i =
         std::find( nodes.begin(), nodes.end(), this );
-    EQASSERT( i != nodes.end( ));
+    LBASSERT( i != nodes.end( ));
 
     NodePath path;
     path.nodeIndex = std::distance( nodes.begin(), i );
@@ -284,7 +287,7 @@ Node< C, N, P, V >::getIAttributeString( const IAttribute attr )
 template< class C, class N, class P, class V >
 void Node< C, N, P, V >::_addPipe( P* pipe )
 {
-    EQASSERT( pipe->getNode() == this );
+    LBASSERT( pipe->getNode() == this );
     _pipes.push_back( pipe );
 }
 
@@ -300,7 +303,7 @@ bool Node< C, N, P, V >::_removePipe( P* pipe )
 }
 
 template< class C, class N, class P, class V >
-P* Node< C, N, P, V >::findPipe( const co::base::UUID& id )
+P* Node< C, N, P, V >::findPipe( const UUID& id )
 {
     for( typename Pipes::const_iterator i = _pipes.begin();
          i != _pipes.end(); ++i )
@@ -315,13 +318,13 @@ P* Node< C, N, P, V >::findPipe( const co::base::UUID& id )
 template< class C, class N, class P, class V >
 std::ostream& operator << ( std::ostream& os, const Node< C, N, P, V >& node )
 {
-    os << co::base::disableFlush << co::base::disableHeader;
+    os << lunchbox::disableFlush << lunchbox::disableHeader;
     if( node.isApplicationNode( ))
         os << "appNode" << std::endl;
     else
         os << "node" << std::endl;
 
-    os << "{" << std::endl << co::base::indent;
+    os << "{" << std::endl << lunchbox::indent;
 
     const std::string& name = node.getName();
     if( !name.empty( ))
@@ -335,8 +338,8 @@ std::ostream& operator << ( std::ostream& os, const Node< C, N, P, V >& node )
     {
         os << **i;
     }
-    os << co::base::exdent << "}" << std::endl
-       << co::base::enableHeader << co::base::enableFlush;
+    os << lunchbox::exdent << "}" << std::endl
+       << lunchbox::enableHeader << lunchbox::enableFlush;
     return os;
 }
 

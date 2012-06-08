@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2009-2011, Stefan Eilemann <eile@equalizergraphics.com>
+/* Copyright (c) 2009-2012, Stefan Eilemann <eile@equalizergraphics.com>
                       2009, Maxim Makhinya
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -17,6 +17,7 @@
  */
 
 #include "pipe.h"
+#ifdef AGL
 
 #include <eq/client/global.h>
 #include <eq/client/os.h>
@@ -47,7 +48,7 @@ bool Pipe::configInit()
     CGDirectDisplayID displayID = CGMainDisplayID();
     const uint32_t device = getPipe()->getDevice();
 
-    if( device != EQ_UNDEFINED_UINT32 )
+    if( device != LB_UNDEFINED_UINT32 )
     {
         CGDirectDisplayID displayIDs[device+1];
         CGDisplayCount    nDisplays;
@@ -69,7 +70,7 @@ bool Pipe::configInit()
     }
 
     _setCGDisplayID( displayID );
-    EQVERB << "Using CG displayID " << displayID << std::endl;
+    LBVERB << "Using CG displayID " << displayID << std::endl;
     return true;
 }
 
@@ -103,8 +104,9 @@ void Pipe::_setCGDisplayID( CGDirectDisplayID id )
 void Pipe::configExit()
 {
     _setCGDisplayID( kCGNullDirectDisplay );
-    EQINFO << "Reset CG displayID " << std::endl;
+    LBINFO << "Reset CG displayID " << std::endl;
 }
 
 }
 }
+#endif // AGL

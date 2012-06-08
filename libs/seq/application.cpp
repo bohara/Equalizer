@@ -39,12 +39,21 @@ Application::Application()
 
 Application::~Application()
 {
-    EQASSERT( !_impl );
+    LBASSERT( !_impl );
+}
+
+co::NodePtr Application::getMasterNode()
+{
+    eq::Config* config = getConfig();
+    LBASSERT( config );
+    if( !config )
+        return 0;
+    return config->getApplicationNode();
 }
 
 eq::Config* Application::getConfig()
 {
-    EQASSERT( _impl );
+    LBASSERT( _impl );
     if( !_impl )
         return 0;
     return _impl->getConfig();
@@ -67,10 +76,10 @@ void Application::destroyViewData( ViewData* viewData )
 
 bool Application::init( const int argc, char** argv, co::Object* initData )
 {
-    EQASSERT( !_impl );
+    LBASSERT( !_impl );
     if( _impl )
     {
-        EQERROR << "Already initialized" << std::endl;
+        LBERROR << "Already initialized" << std::endl;
         return false;
     }
 
@@ -78,13 +87,13 @@ bool Application::init( const int argc, char** argv, co::Object* initData )
     initErrors();
     if( !eq::init( argc, argv, _impl ))
     {
-        EQERROR << "Equalizer initialization failed" << std::endl;
+        LBERROR << "Equalizer initialization failed" << std::endl;
         return false;
     }
 
     if( !initLocal( argc, argv ))
     {
-        EQERROR << "Can't initialization client node" << std::endl;
+        LBERROR << "Can't initialization client node" << std::endl;
         exit();
         return false;
     }
@@ -119,7 +128,7 @@ bool Application::exit()
     delete _impl;
     _impl = 0;
 
-    EQASSERTINFO( getRefCount() == 1, this->getRefCount( ));
+    LBASSERTINFO( getRefCount() == 1, this->getRefCount( ));
     return retVal;
 }
 

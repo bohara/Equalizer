@@ -18,11 +18,13 @@
 #pragma once
 
 #include <co/connection.h>
+#include "ring.h"
 
-#include <co/base/thread.h>
-#include <co/base/monitor.h>
-#include <co/base/ring.h>
-#include <co/base/scopedMutex.h>
+#include <lunchbox/thread.h>
+#include <lunchbox/monitor.h>
+#include <lunchbox/scopedMutex.h>
+
+#include <bitset>
 
 #include <rdma/rdma_cma.h>
 
@@ -44,13 +46,13 @@ public:
     size_t getBufferSize( ) const { return _buffer_size; }
     void *getBuffer( )
     {
-        base::ScopedWrite mutex( _buffer_lock );
+        lunchbox::ScopedWrite mutex( _buffer_lock );
 
         return (void *)( (uintptr_t)_buffer + ( _ring.get( ) * _buffer_size ));
     }
     void freeBuffer( void *buf )
     {
-        base::ScopedWrite mutex( _buffer_lock );
+        lunchbox::ScopedWrite mutex( _buffer_lock );
 
         ::memset( buf, 0xff, _buffer_size ); // Paranoid
 
@@ -66,7 +68,7 @@ private:
     void *_buffer;
     struct ibv_mr *_mr;
     BufferQ<uint32_t> _ring;
-    base::Lock _buffer_lock;
+    lunchbox::Lock _buffer_lock;
 }; // BufferPool
 
 /**
@@ -151,7 +153,7 @@ public:
 
     virtual bool connect( );
     virtual bool listen( );
-    virtual void close( );
+    virtual void close( ) { _close( ); }
 
     virtual void acceptNB( );
     virtual ConnectionPtr acceptSync( );
@@ -159,7 +161,7 @@ public:
 protected:
     virtual void    readNB  ( void* buffer, const uint64_t bytes );
     virtual int64_t readSync( void* buffer, const uint64_t bytes,
-                              const bool ignored );
+                              const bool block );
     virtual int64_t write   ( const void* buffer, const uint64_t bytes );
 
 public:
@@ -172,10 +174,12 @@ protected:
 
 private:
     /* Teardown */
+    void _close( );
     void _cleanup( );
 
     /* Setup */
-    bool _finishAccept( struct rdma_event_channel *listen_channel );
+    bool _finishAccept( struct rdma_cm_id *new_cm_id,
+        const RDMAConnParamData &cpd );
 
     bool _lookupAddress( const bool passive );
     void _updateInfo( struct sockaddr *addr );
@@ -183,6 +187,7 @@ private:
     bool _createEventChannel( );
     bool _createId( );
 
+    bool _initVerbs( );
     bool _createQP( );
     bool _initBuffers( );
 
@@ -191,41 +196,62 @@ private:
     bool _connect( );
 
     bool _bindAddress( );
-    bool _listen( );
+    bool _listen( int backlog );
     bool _migrateId( );
     bool _accept( );
     bool _reject( );
 
     /* Protocol */
+    bool _initProtocol( int32_t depth );
+
+    inline bool _needFC( );
+
     bool _postReceives( const uint32_t count );
+
     inline void _recvRDMAWrite( const uint32_t imm_data );
+    inline uint32_t _makeImm( const uint32_t b );
     bool _postRDMAWrite( );
-    void _recvMessage( const RDMAMessage &message );
+
     bool _postMessage( const RDMAMessage &message );
+    void _recvMessage( const RDMAMessage &message );
     inline void _recvFC( const RDMAFCPayload &fc );
     bool _postFC( const uint32_t bytes_taken );
     void _recvSetup( const RDMASetupPayload &setup );
     bool _postSetup( );
+
     bool _waitRecvSetup( );
 
 private:
-    /* Connection Manager event handler */
-    bool _doCMEvent( struct rdma_event_channel *channel,
-        enum rdma_cm_event_type expected );
+    enum Events
+    {
+        CM_EVENT  = 0,
+        CQ_EVENT  = 1,
+        BUF_EVENT = 2,
+    };
+    typedef std::bitset<3> eventset;
 
-    /* Completion Queue event handler */
-    bool _pollCQ( );
+    bool _createNotifier( );
+    bool _checkEvents( eventset &events );
+
+    /* Connection manager events */
+    bool _checkDisconnected( eventset &events );
+    bool _waitForCMEvent( enum rdma_cm_event_type expected );
+    bool _doCMEvent( enum rdma_cm_event_type expected );
+
+    /* Completion queue events */
     bool _rearmCQ( );
+    bool _checkCQ( bool drain );
+
+    /* Available byte events */
+    bool _createBytesAvailableFD( );
+    bool _incrAvailableBytes( const uint64_t b );
+    uint64_t _getAvailableBytes( );
 
 private:
-    /* _cm->fd (listener) or _cm_id->recv_cq_channel->fd (connection) */
     Notifier _notifier;
 
-    /* Protect close( ) from multiple threads */
-    base::Lock _close_lock;
-
-    /* Protect _pollCQ( ) from multiple threads */
-    base::Lock _poll_lock;
+    /* Protect RDMA/Verbs vars from multiple threads */
+    lunchbox::Lock _poll_lock;
 
     /* Timeout for resolving RDMA address & route */
     const int32_t _timeout;
@@ -238,15 +264,25 @@ private:
     struct rdma_addrinfo *_rai;
     struct rdma_event_channel *_cm;
     struct rdma_cm_id *_cm_id;
+    struct rdma_cm_id *_new_cm_id;
+    struct ibv_comp_channel *_cc;
+    struct ibv_cq *_cq;
     struct ibv_pd *_pd;
+
+    int _event_fd;
 
     struct RDMAConnParamData _cpd;
     bool _established;
-    int32_t _depth;
-    base::a_int32_t _credits;
+
+    int32_t _depth;               // Maximum sends in flight (RDMA & FC)
+    lunchbox::a_int32_t _writes;  // Number of unacked RDMA writes received
+    lunchbox::a_int32_t _fcs;     // Number of unacked FC messages received
+    lunchbox::a_int32_t _wcredits; // Number of RDMA write credits available
+    lunchbox::a_int32_t _fcredits; // Number of FC message credits available
+
     unsigned int _completions;
 
-    /* MR for setup and FC messages */
+    /* MR for setup and ack messages */
     BufferPool _msgbuf;
 
     /* source RDMA MR */
@@ -284,48 +320,6 @@ private:
     inline uint32_t _drain( void *buffer, const uint32_t bytes );
     /* copy bytes in to the source buffer */
     inline uint32_t _fill( const void *buffer, const uint32_t bytes );
-
-private:
-    /* Singleton channel event monitor thread */
-    class ChannelEventThread;
-    static ChannelEventThread *_event_thread;
-    static base::Lock _thread_lock;
-
-    bool _eventThreadRegister( );
-    void _eventThreadUnregister( );
-
-    /* Simple command protocol between application and event thread */
-    enum CmdStatus
-    {
-        CMD_WAIT,
-        CMD_FAIL,
-   /*
-    * Set value of CMD_DONE so consumers can test if a command is done by
-    * testing (result & CMD_DONE).
-    */
-        CMD_DONE = 1 << 7,
-        CMD_DONE_LAST,
-    };
-    base::Monitor<CmdStatus> _cmd_block;
-
-    /* Types of file descriptors that the event thread will monitor */
-    enum epoll_type { EVENT_FD, CONNECTION_FD };
-    struct epoll_context
-    {
-        epoll_context( ChannelEventThread *thread )
-            : type( EVENT_FD ) { ctx.thread = thread; }
-        epoll_context( RDMAConnection *connection )
-            : type( CONNECTION_FD ) { ctx.connection = connection; }
-
-        const epoll_type type;
-        union
-        {
-            ChannelEventThread *thread;
-            RDMAConnection *connection;
-        } ctx;
-    };
-    struct epoll_context _context;
-    bool _registered;
 
 private:
     struct stats

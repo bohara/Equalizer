@@ -1,16 +1,16 @@
 
 /* Copyright (c) 2005-2012, Stefan Eilemann <eile@equalizergraphics.com>
- *                    2011, Cedric Stalder <cedric Stalder@gmail.com> 
+ *                    2011, Cedric Stalder <cedric Stalder@gmail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
  * by the Free Software Foundation.
- *  
+ *
  * This library is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
  * FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more
  * details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public License
  * along with this library; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -44,40 +44,118 @@
 #include <co/command.h>
 #include <co/connectionDescription.h>
 #include <co/global.h>
-#include <co/base/scopedMutex.h>
+#include <lunchbox/scopedMutex.h>
 
 namespace eq
 {
+namespace
+{
+/** A proxy object to keep master data within latency. */
+class LatencyObject : public co::Object
+{
+public:
+    LatencyObject( const ChangeType type, const uint32_t compressor,
+                   const uint32_t frame )
+            : frameNumber( frame ), _changeType( type )
+            , _compressor( compressor ) {}
+
+    const uint32_t frameNumber;
+
+protected:
+    virtual ChangeType getChangeType() const { return _changeType; }
+    virtual void getInstanceData( co::DataOStream& os ){ LBDONTCALL }
+    virtual void applyInstanceData( co::DataIStream& is ){ LBDONTCALL }
+    virtual uint32_t chooseCompressor() const { return _compressor; }
+
+private:
+    const ChangeType _changeType;
+    const uint32_t _compressor;
+};
+}
+
+namespace detail
+{
+class Config
+{
+public:
+    Config()
+            : lastEvent( 0 )
+            , currentFrame( 0 )
+            , unlockedFrame( 0 )
+            , finishedFrame( 0 )
+            , running( false )
+    {
+        lunchbox::Log::setClock( &clock );
+    }
+
+    ~Config()
+    {
+        lastEvent = 0;
+        appNode   = 0;
+        lunchbox::Log::setClock( 0 );
+    }
+
+    /** The node running the application thread. */
+    co::NodePtr appNode;
+
+    /** The receiver->app thread event queue. */
+    CommandQueue eventQueue;
+
+    /** The last received event to be released. */
+    co::Command* lastEvent;
+
+    /** The connections configured by the server for this config. */
+    co::Connections connections;
+
+    /** Global statistics events, index per frame and channel. */
+    lunchbox::Lockable< std::deque< FrameStatistics >, lunchbox::SpinLock >
+        statistics;
+
+    /** The last started frame. */
+    uint32_t currentFrame;
+    /** The last locally released frame. */
+    uint32_t unlockedFrame;
+    /** The last completed frame. */
+    lunchbox::Monitor< uint32_t > finishedFrame;
+
+    /** The global clock. */
+    lunchbox::Clock clock;
+
+    std::deque< int64_t > frameTimes; //!< Start time of last frames
+
+    /** list of the current latency object */
+    typedef std::vector< LatencyObject* > LatencyObjects;
+
+    /** protected list of the current latency object */
+    lunchbox::Lockable< LatencyObjects, lunchbox::SpinLock > latencyObjects;
+
+    /** true while the config is initialized and no window has exited. */
+    bool running;
+};
+}
+
 /** @cond IGNORE */
 typedef co::CommandFunc<Config> ConfigFunc;
 /** @endcond */
 
 Config::Config( ServerPtr server )
         : Super( server )
-        , _lastEvent( 0 )
-        , _currentFrame( 0 )
-        , _unlockedFrame( 0 )
-        , _finishedFrame( 0 )
-        , _running( false )
-{
-    co::base::Log::setClock( &_clock );
-}
+        , _impl( new detail::Config )
+{}
 
 Config::~Config()
 {
-    EQASSERT( getObservers().empty( ));
-    EQASSERT( getLayouts().empty( ));
-    EQASSERT( getCanvases().empty( ));
-    EQASSERT( getNodes().empty( ));
-    EQASSERT( _latencyObjects->empty() );
+    LBASSERT( getObservers().empty( ));
+    LBASSERT( getLayouts().empty( ));
+    LBASSERT( getCanvases().empty( ));
+    LBASSERT( getNodes().empty( ));
+    LBASSERT( _impl->latencyObjects->empty() );
 
     while( tryNextEvent( )) /* flush all pending events */ ;
-    if( _lastEvent )
-        _lastEvent->release();
-    _eventQueue.flush();
-    _lastEvent = 0;
-    _appNode   = 0;
-    co::base::Log::setClock( 0 );
+    if( _impl->lastEvent )
+        _impl->lastEvent->release();
+    _impl->eventQueue.flush();
+    delete _impl;
 }
 
 void Config::attach( const UUID& id, const uint32_t instanceID )
@@ -91,21 +169,21 @@ void Config::attach( const UUID& id, const uint32_t instanceID )
                      ConfigFunc( this, &Config::_cmdCreateNode ), queue );
     registerCommand( fabric::CMD_CONFIG_DESTROY_NODE,
                      ConfigFunc( this, &Config::_cmdDestroyNode ), queue );
-    registerCommand( fabric::CMD_CONFIG_INIT_REPLY, 
+    registerCommand( fabric::CMD_CONFIG_INIT_REPLY,
                      ConfigFunc( this, &Config::_cmdInitReply ), queue );
-    registerCommand( fabric::CMD_CONFIG_EXIT_REPLY, 
+    registerCommand( fabric::CMD_CONFIG_EXIT_REPLY,
                      ConfigFunc( this, &Config::_cmdExitReply ), queue );
     registerCommand( fabric::CMD_CONFIG_UPDATE_VERSION,
                      ConfigFunc( this, &Config::_cmdUpdateVersion ), 0 );
     registerCommand( fabric::CMD_CONFIG_UPDATE_REPLY,
                      ConfigFunc( this, &Config::_cmdUpdateReply ), queue );
-    registerCommand( fabric::CMD_CONFIG_RELEASE_FRAME_LOCAL, 
+    registerCommand( fabric::CMD_CONFIG_RELEASE_FRAME_LOCAL,
                      ConfigFunc( this, &Config::_cmdReleaseFrameLocal ), queue);
-    registerCommand( fabric::CMD_CONFIG_FRAME_FINISH, 
+    registerCommand( fabric::CMD_CONFIG_FRAME_FINISH,
                      ConfigFunc( this, &Config::_cmdFrameFinish ), 0 );
     registerCommand( fabric::CMD_CONFIG_EVENT, ConfigFunc( 0, 0 ),
-                     &_eventQueue );
-    registerCommand( fabric::CMD_CONFIG_SYNC_CLOCK, 
+                     &_impl->eventQueue );
+    registerCommand( fabric::CMD_CONFIG_SYNC_CLOCK,
                      ConfigFunc( this, &Config::_cmdSyncClock ), 0 );
     registerCommand( fabric::CMD_CONFIG_SWAP_OBJECT,
                      ConfigFunc( this, &Config::_cmdSwapObject ), 0 );
@@ -114,12 +192,12 @@ void Config::attach( const UUID& id, const uint32_t instanceID )
 void Config::notifyAttached()
 {
     fabric::Object::notifyAttached();
-    EQASSERT( !_appNode )
-    EQASSERT( getAppNodeID().isGenerated() )
+    LBASSERT( !_impl->appNode )
+    LBASSERT( getAppNodeID().isGenerated() )
     co::LocalNodePtr localNode = getLocalNode();
-    _appNode = localNode->connect( getAppNodeID( ));
-    if( !_appNode )
-        EQWARN << "Connection to application node failed -- misconfigured "
+    _impl->appNode = localNode->connect( getAppNodeID( ));
+    if( !_impl->appNode )
+        LBWARN << "Connection to application node failed -- misconfigured "
                << "connections on appNode?" << std::endl;
 }
 
@@ -127,19 +205,19 @@ void Config::notifyDetach()
 {
     {
         ClientPtr client = getClient();
-        co::base::ScopedFastWrite mutex( _latencyObjects );
-        while( !_latencyObjects->empty() )
+        lunchbox::ScopedFastWrite mutex( _impl->latencyObjects );
+        while( !_impl->latencyObjects->empty() )
         {
-            LatencyObject* latencyObject = _latencyObjects->back();
-            _latencyObjects->pop_back();
+            LatencyObject* latencyObject = _impl->latencyObjects->back();
+            _impl->latencyObjects->pop_back();
             client->deregisterObject( latencyObject );
             delete latencyObject;
             latencyObject = 0;
         }
     }
 
-    getClient()->removeListeners( _connections );
-    _connections.clear();
+    getClient()->removeListeners( _impl->connections );
+    _impl->connections.clear();
     _exitMessagePump();
     Super::notifyDetach();
 }
@@ -155,15 +233,19 @@ co::CommandQueue* Config::getCommandThreadQueue()
 }
 
 ClientPtr Config::getClient()
-{ 
-    return getServer()->getClient(); 
+{
+    return getServer()->getClient();
 }
 
 ConstClientPtr Config::getClient() const
-{ 
-    return getServer()->getClient(); 
+{
+    return getServer()->getClient();
 }
 
+co::NodePtr Config::getApplicationNode()
+{
+    return _impl->appNode;
+}
 
 namespace
 {
@@ -171,11 +253,13 @@ class SetDefaultVisitor : public ConfigVisitor
 {
 public:
     SetDefaultVisitor( const Strings& activeLayouts, const float modelUnit )
-            : _layouts( activeLayouts ), _modelUnit( modelUnit ) {}
+            : _layouts( activeLayouts ), _modelUnit( modelUnit )
+            , _update( false ) {}
 
     virtual VisitorResult visit( View* view )
         {
-            view->setModelUnit( _modelUnit );
+            if( view->setModelUnit( _modelUnit ))
+                _update = true;
             return TRAVERSE_CONTINUE;
         }
 
@@ -189,49 +273,57 @@ public:
                 for( LayoutsCIter j = layouts.begin(); j != layouts.end(); ++j )
                 {
                     const Layout* layout = *j;
-                    if( layout->getName() == name )
-                        canvas->useLayout( j - layouts.begin( ));
+                    if( layout->getName() == name &&
+                        canvas->useLayout( j - layouts.begin( )))
+                    {
+                        _update = true;
+                    }
                 }
             }
             return TRAVERSE_CONTINUE;
         }
 
+    bool needsUpdate() const { return _update; }
+
 private:
     const Strings& _layouts;
     const float _modelUnit;
+    bool _update;
 };
 }
 
 bool Config::init( const uint128_t& initID )
 {
-    EQASSERT( !_running );
-    _currentFrame = 0;
-    _unlockedFrame = 0;
-    _finishedFrame = 0;
-    _frameTimes.clear();
+    LBASSERT( !_impl->running );
+    _impl->currentFrame = 0;
+    _impl->unlockedFrame = 0;
+    _impl->finishedFrame = 0;
+    _impl->frameTimes.clear();
 
     ClientPtr client = getClient();
     SetDefaultVisitor defaults( client->getActiveLayouts(),
                                 client->getModelUnit( ));
     accept( defaults );
+    if( defaults.needsUpdate( ))
+        update();
 
     co::LocalNodePtr localNode = getLocalNode();
     ConfigInitPacket packet;
     packet.requestID = localNode->registerRequest();
     packet.initID = initID;
     send( getServer(), packet );
-    
+
     while( !localNode->isRequestServed( packet.requestID ))
         client->processCommand();
-    localNode->waitRequest( packet.requestID, _running );
+    localNode->waitRequest( packet.requestID, _impl->running );
     localNode->enableSendOnRegister();
 
-    if( _running )
+    if( _impl->running )
         handleEvents();
     else
-        EQWARN << "Config initialization failed: " << getError() << std::endl
+        LBWARN << "Config initialization failed: " << getError() << std::endl
                << "    Consult client log for further information" << std::endl;
-    return _running;
+    return _impl->running;
 }
 
 bool Config::exit()
@@ -254,11 +346,11 @@ bool Config::exit()
     localNode->waitRequest( packet.requestID, ret );
 
     while( tryNextEvent( )) /* flush all pending events */ ;
-    if( _lastEvent )
-        _lastEvent->release();
-    _eventQueue.flush();
-    _lastEvent = 0;
-    _running = false;
+    if( _impl->lastEvent )
+        _impl->lastEvent->release();
+    _impl->eventQueue.flush();
+    _impl->lastEvent = 0;
+    _impl->running = false;
     return ret;
 }
 
@@ -269,7 +361,7 @@ bool Config::update()
     // send update req to server
     ClientPtr client = getClient();
 
-    ConfigUpdatePacket packet;    
+    ConfigUpdatePacket packet;
     packet.versionID = client->registerRequest();
     packet.finishID = client->registerRequest();
     packet.requestID = client->registerRequest();
@@ -281,7 +373,7 @@ bool Config::update()
     uint32_t finishID = 0;
     client->waitRequest( packet.finishID, finishID );
 
-    if( finishID == EQ_UNDEFINED_UINT32 )
+    if( finishID == LB_UNDEFINED_UINT32 )
     {
         sync( version );
         client->unregisterRequest( packet.requestID );
@@ -289,7 +381,7 @@ bool Config::update()
     }
 
     client->disableSendOnRegister();
-    while( _finishedFrame < _currentFrame )
+    while( _impl->finishedFrame < _impl->currentFrame )
         client->processCommand();
 
     sync( version );
@@ -314,21 +406,21 @@ uint32_t Config::startFrame( const uint128_t& frameID )
     ConfigStartFramePacket packet( frameID );
     send( getServer(), packet );
 
-    ++_currentFrame;
-    EQLOG( co::base::LOG_ANY ) << "---- Started Frame ---- " << _currentFrame
-                               << std::endl;
-    stat.event.data.statistic.frameNumber = _currentFrame;
-    return _currentFrame;
+    ++_impl->currentFrame;
+    LBLOG( lunchbox::LOG_ANY ) << "---- Started Frame ---- "
+                               << _impl->currentFrame << std::endl;
+    stat.event.data.statistic.frameNumber = _impl->currentFrame;
+    return _impl->currentFrame;
 }
 
 void Config::_frameStart()
 {
-    _frameTimes.push_back( _clock.getTime64( ));
-    while( _frameTimes.size() > getLatency() )
+    _impl->frameTimes.push_back( _impl->clock.getTime64( ));
+    while( _impl->frameTimes.size() > getLatency() )
     {
-        const int64_t age = _frameTimes.back() - _frameTimes.front();
+        const int64_t age = _impl->frameTimes.back() -_impl->frameTimes.front();
         getClient()->expireInstanceData( age );
-        _frameTimes.pop_front();
+        _impl->frameTimes.pop_front();
     }
 }
 
@@ -336,21 +428,21 @@ uint32_t Config::finishFrame()
 {
     ClientPtr client = getClient();
     const uint32_t latency = getLatency();
-    const uint32_t frameToFinish = (_currentFrame >= latency) ? 
-                                       _currentFrame - latency : 0;
+    const uint32_t frameToFinish = (_impl->currentFrame >= latency) ?
+                                       _impl->currentFrame - latency : 0;
 
     ConfigStatistics stat( Statistic::CONFIG_FINISH_FRAME, this );
     stat.event.data.statistic.frameNumber = frameToFinish;
     {
         ConfigStatistics waitStat( Statistic::CONFIG_WAIT_FINISH_FRAME, this );
         waitStat.event.data.statistic.frameNumber = frameToFinish;
-        
+
         // local draw sync
         if( _needsLocalSync( ))
         {
-            while( _unlockedFrame < _currentFrame )
+            while( _impl->unlockedFrame < _impl->currentFrame )
                 client->processCommand();
-            EQLOG( LOG_TASKS ) << "Local frame sync " << _currentFrame
+            LBLOG( LOG_TASKS ) << "Local frame sync " << _impl->currentFrame
                                << std::endl;
         }
 
@@ -358,59 +450,60 @@ uint32_t Config::finishFrame()
         const Nodes& nodes = getNodes();
         if( !nodes.empty( ))
         {
-            EQASSERT( nodes.size() == 1 );
+            LBASSERT( nodes.size() == 1 );
             const Node* node = nodes.front();
 
             while( node->getFinishedFrame() < frameToFinish )
                 client->processCommand();
-            EQLOG( LOG_TASKS ) << "Local total sync " << frameToFinish
-                               << " @ " << _currentFrame << std::endl;
+            LBLOG( LOG_TASKS ) << "Local total sync " << frameToFinish
+                               << " @ " << _impl->currentFrame << std::endl;
         }
 
         // global sync
         const uint32_t timeout = getTimeout();
-        if( timeout == EQ_TIMEOUT_INDEFINITE )
-            _finishedFrame.waitGE( frameToFinish );
+        if( timeout == LB_TIMEOUT_INDEFINITE )
+            _impl->finishedFrame.waitGE( frameToFinish );
         else
         {
             const int64_t pingTimeout = co::Global::getKeepaliveTimeout();
             const int64_t time = getTime() + timeout;
 
-            while( !_finishedFrame.timedWaitGE( frameToFinish, pingTimeout ))
+            while( !_impl->finishedFrame.timedWaitGE( frameToFinish, pingTimeout ))
             {
                 if( getTime() >= time || !getLocalNode()->pingIdleNodes( ))
                 {
-                    EQWARN << "Timeout waiting for nodes to finish frame " 
+                    LBWARN << "Timeout waiting for nodes to finish frame "
                            << frameToFinish << std::endl;
                     break;
                 }
             }
         }
-        EQLOG( LOG_TASKS ) << "Global sync " << frameToFinish << " @ "
-                           << _currentFrame << std::endl;
+        LBLOG( LOG_TASKS ) << "Global sync " << frameToFinish << " @ "
+                           << _impl->currentFrame << std::endl;
     }
 
     handleEvents();
     _updateStatistics( frameToFinish );
     _releaseObjects();
 
-    EQLOG( co::base::LOG_ANY ) << "---- Finished Frame --- " << frameToFinish
-                               << " (" << _currentFrame << ')' << std::endl;
+    LBLOG( lunchbox::LOG_ANY )
+        << "---- Finished Frame --- " << frameToFinish << " ("
+        << _impl->currentFrame << ')' << std::endl;
     return frameToFinish;
 }
 
 uint32_t Config::finishAllFrames()
 {
-    if( _finishedFrame == _currentFrame )
-        return _currentFrame;
+    if( _impl->finishedFrame == _impl->currentFrame )
+        return _impl->currentFrame;
 
-    EQLOG( co::base::LOG_ANY ) << "-- Finish All Frames --" << std::endl;
+    LBLOG( lunchbox::LOG_ANY ) << "-- Finish All Frames --" << std::endl;
     ConfigFinishAllFramesPacket packet;
     send( getServer(), packet );
 
     ClientPtr client = getClient();
     const uint32_t timeout = getTimeout();
-    while( _finishedFrame < _currentFrame )
+    while( _impl->finishedFrame < _impl->currentFrame )
     {
         try
         {
@@ -418,15 +511,20 @@ uint32_t Config::finishAllFrames()
         }
         catch( const co::Exception& e )
         {
-            EQWARN << e.what() << std::endl;
+            LBWARN << e.what() << std::endl;
             break;
-        } 
+        }
     }
     handleEvents();
-    _updateStatistics( _currentFrame );
+    _updateStatistics( _impl->currentFrame );
     _releaseObjects();
-    EQLOG( co::base::LOG_ANY ) << "-- Finished All Frames --" << std::endl;
-    return _currentFrame;
+    LBLOG( lunchbox::LOG_ANY ) << "-- Finished All Frames --" << std::endl;
+    return _impl->currentFrame;
+}
+
+void Config::releaseFrameLocal( const uint32_t frameNumber )
+{
+    _impl->unlockedFrame = frameNumber;
 }
 
 void Config::stopFrames()
@@ -448,7 +546,7 @@ public:
         co::Object* userData = view->getUserData();
         if( userData && userData->isMaster( ))
             userData->setAutoObsolete( _latency + 1 );
-        return TRAVERSE_CONTINUE;    
+        return TRAVERSE_CONTINUE;
     }
 
     VisitorResult visit( eq::Channel* channel )
@@ -458,7 +556,7 @@ public:
     }
 
 private:
-    const uint32_t _latency; 
+    const uint32_t _latency;
 };
 }
 
@@ -483,33 +581,38 @@ void Config::changeLatency( const uint32_t latency )
 
 void Config::sendEvent( ConfigEvent& event )
 {
-    EQASSERT( event.data.type != Event::STATISTIC ||
+    LBASSERT( event.data.type != Event::STATISTIC ||
               event.data.statistic.type != Statistic::NONE );
-    EQASSERT( getAppNodeID() != co::NodeID::ZERO );
-    EQASSERT( _appNode.isValid( ));
+    LBASSERT( getAppNodeID() != co::NodeID::ZERO );
+    LBASSERT( _impl->appNode );
 
-    if( _appNode.isValid( ))
-        send( _appNode, event );
+    if( _impl->appNode )
+        send( _impl->appNode, event );
 }
 
 const ConfigEvent* Config::nextEvent()
 {
-    if( _lastEvent )
-        _lastEvent->release();
-    _lastEvent = _eventQueue.pop();
-    return _lastEvent->get<ConfigEvent>();
+    if( _impl->lastEvent )
+        _impl->lastEvent->release();
+    _impl->lastEvent = _impl->eventQueue.pop();
+    return _impl->lastEvent->get<ConfigEvent>();
 }
 
 const ConfigEvent* Config::tryNextEvent()
 {
-    co::Command* command = _eventQueue.tryPop();
+    co::Command* command = _impl->eventQueue.tryPop();
     if( !command )
         return 0;
 
-    if( _lastEvent )
-        _lastEvent->release();
-    _lastEvent = command;
+    if( _impl->lastEvent )
+        _impl->lastEvent->release();
+    _impl->lastEvent = command;
     return command->get<ConfigEvent>();
+}
+
+bool Config::checkEvent() const
+{
+    return !_impl->eventQueue.isEmpty();
 }
 
 void Config::handleEvents()
@@ -524,39 +627,39 @@ bool Config::handleEvent( const ConfigEvent* event )
     {
         case Event::EXIT:
         case Event::WINDOW_CLOSE:
-            _running = false;
+            _impl->running = false;
             return true;
 
         case Event::KEY_PRESS:
             if( event->data.keyPress.key == KC_ESCAPE )
             {
-                _running = false;
+                _impl->running = false;
                 return true;
-            }    
+            }
             break;
 
         case Event::WINDOW_POINTER_BUTTON_PRESS:
         case Event::CHANNEL_POINTER_BUTTON_PRESS:
-            if( event->data.pointerButtonPress.buttons == 
+            if( event->data.pointerButtonPress.buttons ==
                 ( PTR_BUTTON1 | PTR_BUTTON2 | PTR_BUTTON3 ))
             {
-                _running = false;
+                _impl->running = false;
                 return true;
             }
             break;
 
         case Event::STATISTIC:
         {
-            EQLOG( LOG_STATS ) << event->data << std::endl;
+            LBLOG( LOG_STATS ) << event->data << std::endl;
 
             const uint32_t originator = event->data.serial;
-            EQASSERTINFO( originator != EQ_INSTANCE_INVALID, event->data );
+            LBASSERTINFO( originator != EQ_INSTANCE_INVALID, event->data );
             if( originator == 0 )
                 return false;
 
             const Statistic& statistic = event->data.statistic;
             const uint32_t   frame     = statistic.frameNumber;
-            EQASSERT( statistic.type != Statistic::NONE )
+            LBASSERT( statistic.type != Statistic::NONE )
 
             if( frame == 0 ||      // Not a frame-related stat event or
                 statistic.type == Statistic::NONE ) // No event-type set
@@ -564,10 +667,11 @@ bool Config::handleEvent( const ConfigEvent* event )
                 return false;
             }
 
-            co::base::ScopedMutex< co::base::SpinLock > mutex( _statistics );
+            lunchbox::ScopedFastWrite mutex( _impl->statistics );
 
-            for( std::deque<FrameStatistics>::iterator i =_statistics->begin();
-                 i != _statistics->end(); ++i )
+            for( std::deque<FrameStatistics>::iterator i =
+                     _impl->statistics->begin();
+                 i != _impl->statistics->end(); ++i )
             {
                 FrameStatistics& frameStats = *i;
                 if( frameStats.first == frame )
@@ -578,21 +682,21 @@ bool Config::handleEvent( const ConfigEvent* event )
                     return false;
                 }
             }
-            
-            _statistics->push_back( FrameStatistics( ));
-            FrameStatistics& frameStats = _statistics->back();
+
+            _impl->statistics->push_back( FrameStatistics( ));
+            FrameStatistics& frameStats = _impl->statistics->back();
             frameStats.first = frame;
 
             SortedStatistics& sortedStats = frameStats.second;
             Statistics&       statistics  = sortedStats[ originator ];
             statistics.push_back( statistic );
-            
+
             return false;
         }
 
         case Event::VIEW_RESIZE:
         {
-            EQASSERT( event->data.originator != UUID::ZERO );
+            LBASSERT( event->data.originator != UUID::ZERO );
             View* view = find< View >( event->data.originator );
             if( view )
                 return view->handleEvent( event->data );
@@ -609,7 +713,7 @@ bool Config::_needsLocalSync() const
     if( nodes.empty( ))
         return true; // server sends unlock command - process it
 
-    EQASSERT( nodes.size() == 1 );
+    LBASSERT( nodes.size() == 1 );
     const Node* node = nodes.front();
     switch( node->getIAttribute( Node::IATTR_THREAD_MODEL ))
     {
@@ -626,9 +730,9 @@ bool Config::_needsLocalSync() const
             if( node->getTasks() == fabric::TASK_NONE )
                 return false;
             break;
-                
+
         default:
-            EQUNIMPLEMENTED;
+            LBUNIMPLEMENTED;
     }
 
     return true;
@@ -637,24 +741,49 @@ bool Config::_needsLocalSync() const
 void Config::_updateStatistics( const uint32_t finishedFrame )
 {
     // keep statistics for three frames
-    co::base::ScopedMutex< co::base::SpinLock > mutex( _statistics );
-    while( !_statistics->empty() &&
-           finishedFrame - _statistics->front().first > 2 )
+    lunchbox::ScopedMutex< lunchbox::SpinLock > mutex( _impl->statistics );
+    while( !_impl->statistics->empty() &&
+           finishedFrame - _impl->statistics->front().first > 2 )
     {
-        _statistics->pop_front();
+        _impl->statistics->pop_front();
     }
 }
 
 void Config::getStatistics( std::vector< FrameStatistics >& statistics )
 {
-    co::base::ScopedMutex< co::base::SpinLock > mutex( _statistics );
+    lunchbox::ScopedMutex< lunchbox::SpinLock > mutex( _impl->statistics );
 
-    for( std::deque<FrameStatistics>::const_iterator i = _statistics->begin();
-         i != _statistics->end(); ++i )
+    for( std::deque<FrameStatistics>::const_iterator i =
+             _impl->statistics->begin(); i != _impl->statistics->end(); ++i )
     {
-        if( (*i).first <= _finishedFrame.get( ))
+        if( (*i).first <= _impl->finishedFrame.get( ))
             statistics.push_back( *i );
     }
+}
+
+uint32_t Config::getCurrentFrame() const
+{
+    return _impl->currentFrame;
+}
+
+uint32_t Config::getFinishedFrame() const
+{
+    return _impl->finishedFrame.get();
+}
+
+bool Config::isRunning() const
+{
+    return _impl->running;
+}
+
+void Config::stopRunning()
+{
+    _impl->running = false;
+}
+
+int64_t Config::getTime() const
+{
+    return _impl->clock.getTime64();
 }
 
 bool Config::mapViewObjects() const
@@ -672,35 +801,35 @@ void Config::setupMessagePump( Pipe* pipe )
         return;
 
     // called from pipe threads - but only during init
-    static co::base::Lock _lock;
-    co::base::ScopedWrite mutex( _lock );
+    static lunchbox::Lock _lock;
+    lunchbox::ScopedWrite mutex( _lock );
 
-    if( _eventQueue.getMessagePump( )) // Already done
+    if( _impl->eventQueue.getMessagePump( )) // Already done
         return;
 
     MessagePump* pump = pipe->createMessagePump();
-    _eventQueue.setMessagePump( pump );
+    _impl->eventQueue.setMessagePump( pump );
 
     ClientPtr client = getClient();
-    CommandQueue* queue = EQSAFECAST( CommandQueue*, 
+    CommandQueue* queue = LBSAFECAST( CommandQueue*,
                                       client->getMainThreadQueue( ));
-    EQASSERT( queue );
-    EQASSERT( !queue->getMessagePump( ));
+    LBASSERT( queue );
+    LBASSERT( !queue->getMessagePump( ));
 
     queue->setMessagePump( pump );
 }
 
 void Config::_exitMessagePump()
 {
-    MessagePump* pump = _eventQueue.getMessagePump();
+    MessagePump* pump = _impl->eventQueue.getMessagePump();
 
-    _eventQueue.setMessagePump( 0 );
+    _impl->eventQueue.setMessagePump( 0 );
 
     ClientPtr client = getClient();
-    CommandQueue* queue = EQSAFECAST( CommandQueue*, 
+    CommandQueue* queue = LBSAFECAST( CommandQueue*,
                                       client->getMainThreadQueue( ));
-    EQASSERT( queue );
-    EQASSERT( queue->getMessagePump() == pump );
+    LBASSERT( queue );
+    LBASSERT( queue->getMessagePump() == pump );
 
     queue->setMessagePump( 0 );
     delete pump;
@@ -709,7 +838,7 @@ void Config::_exitMessagePump()
 MessagePump* Config::getMessagePump()
 {
     ClientPtr client = getClient();
-    CommandQueue* queue = EQSAFECAST( CommandQueue*, 
+    CommandQueue* queue = LBSAFECAST( CommandQueue*,
                                       client->getMainThreadQueue( ));
     if( queue )
         return queue->getMessagePump();
@@ -720,15 +849,15 @@ void Config::setupServerConnections( const char* connectionData )
 {
     std::string data = connectionData;
     co::ConnectionDescriptions descriptions;
-    EQCHECK( co::deserialize( data, descriptions ));
-    EQASSERTINFO( data.empty(), data << " left from " << connectionData );
+    LBCHECK( co::deserialize( data, descriptions ));
+    LBASSERTINFO( data.empty(), data << " left from " << connectionData );
 
     for( co::ConnectionDescriptionsCIter i = descriptions.begin();
          i != descriptions.end(); ++i )
     {
         co::ConnectionPtr connection = getClient()->addListener( *i );
         if( connection )
-            _connections.push_back( connection );
+            _impl->connections.push_back( connection );
     }
 }
 
@@ -742,15 +871,15 @@ bool Config::registerObject( co::Object* object )
 
 void Config::deregisterObject( co::Object* object )
 {
-    EQASSERT( object )
-    EQASSERT( object->isMaster( ));
+    LBASSERT( object )
+    LBASSERT( object->isMaster( ));
 
     if( !object->isAttached( )) // not registered
         return;
 
     const uint32_t latency = getLatency();
     ClientPtr client = getClient();
-    if( latency == 0 || !_running || !object->isBuffered( )) // OPT
+    if( latency == 0 || !_impl->running || !object->isBuffered( )) // OPT
     {
         client->deregisterObject( object );
         return;
@@ -773,13 +902,13 @@ bool Config::mapObject( co::Object* object, const UUID& id,
     return mapObjectSync( mapObjectNB( object, id, version ));
 }
 
-uint32_t Config::mapObjectNB( co::Object* object, const UUID& id, 
+uint32_t Config::mapObjectNB( co::Object* object, const UUID& id,
                               const uint128_t& version )
 {
     return getClient()->mapObjectNB( object, id, version );
 }
 
-uint32_t Config::mapObjectNB( co::Object* object, const UUID& id, 
+uint32_t Config::mapObjectNB( co::Object* object, const UUID& id,
                               const uint128_t& version, co::NodePtr master )
 {
     return getClient()->mapObjectNB( object, id, version, master );
@@ -809,15 +938,15 @@ void Config::_releaseObjects()
 {
     ClientPtr client = getClient();
 
-    co::base::ScopedFastWrite mutex( _latencyObjects );
-    while( !_latencyObjects->empty() )
+    lunchbox::ScopedFastWrite mutex( _impl->latencyObjects );
+    while( !_impl->latencyObjects->empty() )
     {
-        LatencyObject* latencyObject = _latencyObjects->front();
-        if( latencyObject->frameNumber > _currentFrame )
+        LatencyObject* latencyObject = _impl->latencyObjects->front();
+        if( latencyObject->frameNumber > _impl->currentFrame )
             break;
 
         client->deregisterObject( latencyObject );
-        _latencyObjects->erase( _latencyObjects->begin() );
+        _impl->latencyObjects->erase( _impl->latencyObjects->begin() );
 
         delete latencyObject;
     }
@@ -828,29 +957,29 @@ void Config::_releaseObjects()
 //---------------------------------------------------------------------------
 bool Config::_cmdCreateNode( co::Command& command )
 {
-    const ConfigCreateNodePacket* packet = 
+    const ConfigCreateNodePacket* packet =
         command.get<ConfigCreateNodePacket>();
-    EQVERB << "Handle create node " << packet << std::endl;
+    LBVERB << "Handle create node " << packet << std::endl;
 
     Node* node = Global::getNodeFactory()->createNode( this );
-    EQCHECK( mapObject( node, packet->nodeID ));
+    LBCHECK( mapObject( node, packet->nodeID ));
     return true;
 }
 
-bool Config::_cmdDestroyNode( co::Command& command ) 
+bool Config::_cmdDestroyNode( co::Command& command )
 {
     const ConfigDestroyNodePacket* packet =
         command.get<ConfigDestroyNodePacket>();
-    EQVERB << "Handle destroy node " << packet << std::endl;
+    LBVERB << "Handle destroy node " << packet << std::endl;
 
     Node* node = _findNode( packet->nodeID );
-    EQASSERT( node );
+    LBASSERT( node );
     if( !node )
         return true;
 
     NodeConfigExitReplyPacket reply( packet->nodeID, node->isStopped( ));
 
-    EQASSERT( node->getPipes().empty( ));
+    LBASSERT( node->getPipes().empty( ));
     unmapObject( node );
     Global::getNodeFactory()->releaseNode( node );
 
@@ -860,9 +989,9 @@ bool Config::_cmdDestroyNode( co::Command& command )
 
 bool Config::_cmdInitReply( co::Command& command )
 {
-    const ConfigInitReplyPacket* packet = 
+    const ConfigInitReplyPacket* packet =
         command.get<ConfigInitReplyPacket>();
-    EQVERB << "handle init reply " << packet << std::endl;
+    LBVERB << "handle init reply " << packet << std::endl;
 
     sync( packet->version );
     getLocalNode()->serveRequest( packet->requestID, (void*)(packet->result) );
@@ -871,9 +1000,9 @@ bool Config::_cmdInitReply( co::Command& command )
 
 bool Config::_cmdExitReply( co::Command& command )
 {
-    const ConfigExitReplyPacket* packet = 
+    const ConfigExitReplyPacket* packet =
         command.get<ConfigExitReplyPacket>();
-    EQVERB << "handle exit reply " << packet << std::endl;
+    LBVERB << "handle exit reply " << packet << std::endl;
 
     _exitMessagePump();
     getLocalNode()->serveRequest( packet->requestID, (void*)(packet->result) );
@@ -882,7 +1011,7 @@ bool Config::_cmdExitReply( co::Command& command )
 
 bool Config::_cmdUpdateVersion( co::Command& command )
 {
-    const ConfigUpdateVersionPacket* packet = 
+    const ConfigUpdateVersionPacket* packet =
         command.get<ConfigUpdateVersionPacket>();
 
     getClient()->serveRequest( packet->versionID, packet->version );
@@ -892,7 +1021,7 @@ bool Config::_cmdUpdateVersion( co::Command& command )
 
 bool Config::_cmdUpdateReply( co::Command& command )
 {
-    const ConfigUpdateReplyPacket* packet = 
+    const ConfigUpdateReplyPacket* packet =
         command.get<ConfigUpdateReplyPacket>();
 
     sync( packet->version );
@@ -912,17 +1041,17 @@ bool Config::_cmdReleaseFrameLocal( co::Command& command )
 
 bool Config::_cmdFrameFinish( co::Command& command )
 {
-    const ConfigFrameFinishPacket* packet = 
+    const ConfigFrameFinishPacket* packet =
         command.get<ConfigFrameFinishPacket>();
-    EQLOG( LOG_TASKS ) << "frame finish " << packet << std::endl;
+    LBLOG( LOG_TASKS ) << "frame finish " << packet << std::endl;
 
-    _finishedFrame = packet->frameNumber;
+    _impl->finishedFrame = packet->frameNumber;
 
-    if( _unlockedFrame < _finishedFrame.get( ))
+    if( _impl->unlockedFrame < _impl->finishedFrame.get( ))
     {
-        EQWARN << "Finished frame " << _unlockedFrame 
+        LBWARN << "Finished frame " << _impl->unlockedFrame
                << " was not locally unlocked, enforcing unlock" << std::endl;
-        _unlockedFrame = _finishedFrame.get();
+        _impl->unlockedFrame = _impl->finishedFrame.get();
     }
 
     getMainThreadQueue()->wakeup();
@@ -931,32 +1060,32 @@ bool Config::_cmdFrameFinish( co::Command& command )
 
 bool Config::_cmdSyncClock( co::Command& command )
 {
-    const ConfigSyncClockPacket* packet = 
+    const ConfigSyncClockPacket* packet =
         command.get< ConfigSyncClockPacket >();
 
-    EQVERB << "sync global clock to " << packet->time << ", drift " 
-           << packet->time - _clock.getTime64() << std::endl;
+    LBVERB << "sync global clock to " << packet->time << ", drift "
+           << packet->time - _impl->clock.getTime64() << std::endl;
 
-    _clock.set( packet->time );
+    _impl->clock.set( packet->time );
     return true;
 }
 
 bool Config::_cmdSwapObject( co::Command& command )
 {
-    const ConfigSwapObjectPacket* packet = 
+    const ConfigSwapObjectPacket* packet =
         command.get<ConfigSwapObjectPacket>();
-    EQVERB << "Cmd swap object " << packet << std::endl;
+    LBVERB << "Cmd swap object " << packet << std::endl;
 
     co::Object* object = packet->object;
     LatencyObject* latencyObject = new LatencyObject( object->getChangeType(),
                                                      object->chooseCompressor(),
-                                             _currentFrame + getLatency() + 1 );
+                                       _impl->currentFrame + getLatency() + 1 );
     getLocalNode()->swapObject( object, latencyObject  );
     {
-        co::base::ScopedFastWrite mutex( _latencyObjects );
-        _latencyObjects->push_back( latencyObject );
+        lunchbox::ScopedFastWrite mutex( _impl->latencyObjects );
+        _impl->latencyObjects->push_back( latencyObject );
     }
-    EQASSERT( packet->requestID != EQ_UNDEFINED_UINT32 );
+    LBASSERT( packet->requestID != LB_UNDEFINED_UINT32 );
     getLocalNode()->serveRequest( packet->requestID );
     return true;
 }

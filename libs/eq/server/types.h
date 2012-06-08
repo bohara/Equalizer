@@ -22,8 +22,8 @@
 #include <eq/fabric/focusMode.h>
 #include <eq/fabric/queuePackets.h>
 #include <eq/fabric/types.h>
-#include <co/base/refPtr.h>
-#include <co/base/uuid.h>
+#include <lunchbox/refPtr.h>
+#include <lunchbox/uuid.h>
 #include <vector>
 
 namespace eq
@@ -35,6 +35,7 @@ class Canvas;
 class Channel;
 class Compound;
 class Config;
+class ConfigVisitor;
 class Equalizer;
 class Frame;
 class FrameData;
@@ -65,10 +66,10 @@ typedef std::vector< Observer* >     Observers;
 typedef std::vector< Segment* >      Segments;
 typedef std::vector< View* >         Views;
 
-using co::base::uint128_t;
-using co::base::UUID;
-using co::base::Strings;
-using co::base::StringsCIter;
+using lunchbox::uint128_t;
+using lunchbox::UUID;
+using lunchbox::Strings;
+using lunchbox::StringsCIter;
 
 typedef Canvases::const_iterator CanvasesCIter;
 typedef Canvases::iterator CanvasesIter;
@@ -95,8 +96,8 @@ typedef Equalizers::iterator EqualizersIter;
 typedef Windows::const_iterator WindowsCIter;
 typedef Windows::iterator WindowsIter;
 
-typedef co::base::RefPtr< Server > ServerPtr;
-typedef co::base::RefPtr< const Server > ConstServerPtr;
+typedef lunchbox::RefPtr< Server > ServerPtr;
+typedef lunchbox::RefPtr< const Server > ConstServerPtr;
 
 using fabric::Frustumf;
 using fabric::Matrix4f;
@@ -158,10 +159,17 @@ typedef fabric::ElementVisitor< Node, PipeVisitor > NodeVisitor;
 /** A visitor to traverse layouts and children. */
 typedef fabric::ElementVisitor< Layout, ViewVisitor > LayoutVisitor;
 
-class ConfigVisitor;
-
 /** A visitor to traverse servers and children. */
 typedef fabric::ElementVisitor< Server, ConfigVisitor > ServerVisitor;
+
+using fabric::Eye;
+using fabric::EYE_UNDEFINED;
+using fabric::EYE_CYCLOP;
+using fabric::EYE_LEFT;
+using fabric::EYE_RIGHT;
+using fabric::EYES_STEREO;
+using fabric::EYES_ALL;
+using fabric::NUM_EYES;
 
 using fabric::FocusMode;
 using fabric::FOCUSMODE_FIXED;

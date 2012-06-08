@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2008-2011, Stefan Eilemann <eile@equalizergraphics.com> 
+/* Copyright (c) 2008-2012, Stefan Eilemann <eile@equalizergraphics.com> 
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -24,7 +24,7 @@
 #include <eq/client/init.h>
 #include <eq/client/nodeFactory.h>
 #include <eq/fabric/drawableConfig.h>
-#include <co/base/clock.h>
+#include <lunchbox/clock.h>
 
 // Tests the functionality of the compositor and computes the performance.
 
@@ -33,11 +33,11 @@ int main( int argc, char **argv )
     eq::NodeFactory nodeFactory;
     TEST( eq::init( 0, 0, &nodeFactory ));
 
-    eq::Frame      frame;
-    eq::FrameData* frameData = new eq::FrameData;
+    eq::Frame frame;
+    eq::FrameDataPtr frameData = new eq::FrameData;
 
     frameData->setBuffers( eq::Frame::BUFFER_COLOR | eq::Frame::BUFFER_DEPTH );
-    frame.setData( frameData );
+    frame.setFrameData( frameData );
 
     // 1) 2D assembly test
     eq::Image* image = frameData->newImage( eq::Frame::TYPE_MEMORY,
@@ -52,7 +52,7 @@ int main( int argc, char **argv )
     TEST( image->hasPixelData( eq::Frame::BUFFER_COLOR ));
     
     eq::Frames frames;
-    co::base::Clock clock;
+    lunchbox::Clock clock;
     float time;
     const size_t size = image->getPixelDataSize( eq::Frame::BUFFER_COLOR ) * 3;
     frames.push_back( &frame );

@@ -34,11 +34,11 @@ endif()
 if(WIN32)
   eq_add_tool(affinityCheck
     SOURCES affinityCheck/affinityCheck.cpp
-    LINK_LIBRARIES ${GLEW_LIBRARY} ${OPENGL_LIBRARIES}
+    LINK_LIBRARIES ${GLEW_LIBRARY} ${OPENGL_gl_LIBRARY}
     )
 endif(WIN32)
 
-eq_add_tool(configTool
+eq_add_tool(eqConfigTool
   HEADERS configTool/configTool.h configTool/frame.h
   SOURCES configTool/configTool.cpp configTool/writeFromFile.cpp
   LINK_LIBRARIES shared Equalizer shared EqualizerServer
@@ -76,17 +76,17 @@ eq_add_tool(eVolveConverter
     eVolveConverter/ddsbase.cpp
   )
 
-eq_add_tool(netperf
+eq_add_tool(coNetperf
   SOURCES netperf/netperf.cpp
   LINK_LIBRARIES shared Collage
   )
 
-eq_add_tool(netproxy
+eq_add_tool(coNetproxy
   SOURCES netproxy/netproxy.cpp
   LINK_LIBRARIES shared Collage
   )
 
-eq_add_tool(windowAdmin
+eq_add_tool(eqWindowAdmin
   SOURCES windowAdmin/main.cpp
   LINK_LIBRARIES shared EqualizerAdmin
   )

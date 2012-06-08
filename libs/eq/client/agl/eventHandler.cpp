@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2007-2011, Stefan Eilemann <eile@equalizergraphics.com> 
+/* Copyright (c) 2007-2012, Stefan Eilemann <eile@equalizergraphics.com> 
  *                    2011, Cedric Stalder <cedric.stalder@gmail.com> 
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -17,6 +17,7 @@
  */
 
 #include "eventHandler.h"
+#ifdef AGL
 
 #include "window.h"
 #include "windowEvent.h"
@@ -30,7 +31,7 @@
 #include <eq/client/window.h>
 
 #include <co/global.h>
-#include <co/base/file.h>
+#include <lunchbox/file.h>
 
 #ifdef EQ_USE_MAGELLAN
 #  include <eq/client/node.h>
@@ -60,7 +61,7 @@ EventHandler::EventHandler( agl::WindowIF* window )
 
     if( !carbonWindow && !fullscreen )
     {
-        EQWARN << "Can't install event handler without native Carbon window"
+        LBWARN << "Can't install event handler without native Carbon window"
                << std::endl;
         return;
     }
@@ -99,7 +100,7 @@ EventHandler::EventHandler( agl::WindowIF* window )
     const eq::Pipe* pipe = window->getPipe();
     if( pipe->isThreaded( ))
     {
-        EQASSERT( GetCurrentEventQueue() != GetMainEventQueue( ));
+        LBASSERT( GetCurrentEventQueue() != GetMainEventQueue( ));
 
         // dispatches to pipe thread queue
         EventHandlerUPP eventDispatcher = NewEventHandlerUPP(_dispatchEventUPP);
@@ -118,10 +119,10 @@ EventHandler::EventHandler( agl::WindowIF* window )
     Global::leaveCarbon();
 
     if( fullscreen )
-        EQVERB << "Installed event handlers for fullscreen carbon context"
+        LBVERB << "Installed event handlers for fullscreen carbon context"
                << std::endl;
     else
-        EQVERB << "Installed event handlers for carbon window " << carbonWindow
+        LBVERB << "Installed event handlers for carbon window " << carbonWindow
                << std::endl;
 }
 
@@ -149,7 +150,7 @@ OSStatus _dispatchEventUPP(EventHandlerCallRef nextHandler, EventRef event,
     if( GetCurrentEventQueue() != target )
     {
 #if 0 // some events pop up on pipe thread queues...
-        EQASSERTINFO( GetCurrentEventQueue() == GetMainEventQueue(),
+        LBASSERTINFO( GetCurrentEventQueue() == GetMainEventQueue(),
                       "target " << target << " current " << 
                       GetCurrentEventQueue() << " main " << 
                       GetMainEventQueue( ));
@@ -205,7 +206,7 @@ bool EventHandler::handleEvent( EventRef eventRef )
              break;
 
         default:
-            EQINFO << "Unknown event class " << GetEventClass( eventRef )
+            LBINFO << "Unknown event class " << GetEventClass( eventRef )
                    << std::endl;
             return false;
     }
@@ -261,7 +262,7 @@ void EventHandler::_processWindowEvent( WindowEvent& event )
             break;
 
         default:
-            EQINFO << "Unhandled window event " << GetEventKind( eventRef )
+            LBINFO << "Unhandled window event " << GetEventKind( eventRef )
                    << std::endl;
             event.type = Event::UNKNOWN;
             break;
@@ -410,12 +411,12 @@ bool EventHandler::_processMouseEvent( WindowEvent& event )
                     event.pointerWheel.yAxis = delta;
                     return true;
                 default:
-                    EQUNIMPLEMENTED;
+                    LBUNIMPLEMENTED;
             }
             return true;
         }
         default:
-            EQINFO << "Unhandled mouse event " << GetEventKind( eventRef )
+            LBINFO << "Unhandled mouse event " << GetEventKind( eventRef )
                    << std::endl;
             event.type = Event::UNKNOWN;
             return true;
@@ -439,7 +440,7 @@ void EventHandler::_processKeyEvent( WindowEvent& event )
             break;
 
         default:
-            EQINFO << "Unhandled keyboard event " << GetEventKind( eventRef )
+            LBINFO << "Unhandled keyboard event " << GetEventKind( eventRef )
                    << std::endl;
             event.type = Event::UNKNOWN;
             break;
@@ -452,8 +453,8 @@ uint32_t EventHandler::_getButtonState()
     
     // swap button 2&3
     return ( (buttons & 0xfffffff9u) +
-             ((buttons & EQ_BIT3) >> 1) +
-             ((buttons & EQ_BIT2) << 1) );
+             ((buttons & LB_BIT3) >> 1) +
+             ((buttons & LB_BIT2) << 1) );
 }
 
 
@@ -537,7 +538,7 @@ uint32_t EventHandler::_getKey( EventRef eventRef )
 
                 return key;
 
-            EQWARN << "Unrecognized key " << key << std::endl;
+            LBWARN << "Unrecognized key " << key << std::endl;
             return KC_VOID;
     }
 }
@@ -590,7 +591,7 @@ void _magellanEventHandler( io_connect_t connection, natural_t messageType,
                         break; 
                         
                     default:
-                        EQASSERTINFO( 0, "Unimplemented space mouse command " <<
+                        LBASSERTINFO( 0, "Unimplemented space mouse command " <<
                                       state->command );
                 }                 
                         
@@ -611,14 +612,14 @@ void EventHandler::initMagellan( Node* node )
 {
 #ifdef EQ_USE_MAGELLAN
     if( _magellanNode )
-        EQINFO << "Space Mouse already installed" << std::endl;
+        LBINFO << "Space Mouse already installed" << std::endl;
     else if( !InstallConnexionHandlers )
-        EQWARN << "Space Mouse drivers not installed" << std::endl;
+        LBWARN << "Space Mouse drivers not installed" << std::endl;
     else if( InstallConnexionHandlers( _magellanEventHandler, 0, 0 ) != noErr )
-        EQWARN << "Can't install Space Mouse connexion handlers" << std::endl;
+        LBWARN << "Can't install Space Mouse connexion handlers" << std::endl;
     else
     {
-        std::string program( '\0' + co::base::getFilename(
+        std::string program( '\0' + lunchbox::getFilename(
                                         co::Global::getProgramName( )));
         program[0] = program.length() - 1;
 
@@ -645,3 +646,4 @@ void EventHandler::exitMagellan( Node* node )
 
 }
 }
+#endif // AGL

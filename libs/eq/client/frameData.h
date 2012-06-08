@@ -27,8 +27,8 @@
 #include <eq/fabric/subPixel.h>      // member
 
 #include <co/object.h>               // base class
-#include <co/base/monitor.h>         // member
-#include <co/base/spinLock.h>        // member
+#include <lunchbox/monitor.h>         // member
+#include <lunchbox/spinLock.h>        // member
 
 namespace eq
 {
@@ -53,7 +53,7 @@ namespace server { class FrameData; }
      * Parameters set on an Equalizer output frame data are automatically
      * transported to the corresponding input frames.
      */
-    class FrameData : public co::Object
+    class FrameData : public co::Object, public lunchbox::Referenced
     {
     public:
         void assembleFrame( Frame* frame, Channel* channel );
@@ -203,13 +203,20 @@ namespace server { class FrameData; }
         EQ_API Image* newImage( const Frame::Type type,
                                 const DrawableConfig& config );
 
-        /** Flush the frame by deleting all images. @version 1.0 */
-        void flush();
-
         /** Clear the frame by recycling the attached images. @version 1.0 */
         EQ_API void clear();
 
-        /** 
+        /** Flush the frame by deleting all images. @version 1.0 */
+        void flush();
+
+        /** Delete data allocated by the given object manager on all images.*/
+        void deleteGLObjects( ObjectManager* om );
+
+        /** Deallocate all transfer and compression plugins on all images. */
+        void resetPlugins();
+
+#ifndef EQ_2_0_API
+        /**
          * Read back an image for this frame data.
          * 
          * The newly read image is added to the data using newImage(). Existing
@@ -219,13 +226,14 @@ namespace server { class FrameData; }
          * @param glObjects the GL object manager for the current GL context.
          * @param config the configuration of the source frame buffer.
          * @version 1.0
+         * @deprecated @sa startReadback()
          */
-        void readback( const Frame& frame, 
-                       util::ObjectManager< const void* >* glObjects,
+        void readback( const Frame& frame, ObjectManager* glObjects,
                        const DrawableConfig& config );
+#endif
 
         /** 
-         * Read back a set of images for this frame data.
+         * Start reading back a set of images for this frame data.
          * 
          * The newly read images are added to the data using
          * newImage(). Existing images are retained.
@@ -234,12 +242,12 @@ namespace server { class FrameData; }
          * @param glObjects the GL object manager for the current GL context.
          * @param config the configuration of the source frame buffer.
          * @param regions the areas to read back.
-         * @version 1.0
+         * @return the new images which need finishReadback.
+         * @version 1.3.0
          */
-        void readback( const Frame& frame, 
-                       util::ObjectManager< const void* >* glObjects,
-                       const DrawableConfig& config,
-                       const PixelViewports& regions );
+        Images startReadback( const Frame& frame, ObjectManager* glObjects,
+                              const DrawableConfig& config,
+                              const PixelViewports& regions );
 
         /**
          * Set the frame data ready.
@@ -254,7 +262,7 @@ namespace server { class FrameData; }
         bool isReady() const   { return _readyVersion.get() >= _version; }
 
         /** Wait for the frame data to become available. @version 1.0 */
-        void waitReady( const uint32_t timeout = EQ_TIMEOUT_INDEFINITE ) const;
+        void waitReady( const uint32_t timeout = LB_TIMEOUT_INDEFINITE ) const;
         
         /** @internal */
         void setVersion( const uint64_t version );
@@ -268,7 +276,7 @@ namespace server { class FrameData; }
          * @param listener the listener.
          * @version 1.0
          */
-        void addListener( co::base::Monitor<uint32_t>& listener );
+        void addListener( lunchbox::Monitor<uint32_t>& listener );
 
         /** 
          * Remove a frame listener.
@@ -276,7 +284,7 @@ namespace server { class FrameData; }
          * @param listener the listener.
          * @version 1.0
          */
-        void removeListener( co::base::Monitor<uint32_t>& listener );
+        void removeListener( lunchbox::Monitor<uint32_t>& listener );
         
         /** 
          * Disable the usage of a frame buffer attachment for all images.
@@ -307,7 +315,7 @@ namespace server { class FrameData; }
             EQ_API Data& operator=( const Data& rhs );
 
             PixelViewport pvp;
-            Frame::Type   frameType;
+            fabric::Frame::Type frameType;
             uint32_t      buffers;
             uint32_t      period;
             uint32_t      phase;
@@ -324,7 +332,7 @@ namespace server { class FrameData; }
 
         Images _images;
         Images _imageCache;
-        co::base::Lock _imageCacheLock;
+        lunchbox::Lock _imageCacheLock;
 
         ROIFinder* _roiFinder;
 
@@ -332,15 +340,15 @@ namespace server { class FrameData; }
 
         uint64_t _version; //!< The current version
 
-        typedef co::base::Monitor< uint64_t > Monitor;
+        typedef lunchbox::Monitor< uint64_t > Monitor;
 
         /** Data ready monitor synchronization primitive. */
         Monitor _readyVersion;
 
-        typedef co::base::Monitor< uint32_t > Listener;
+        typedef lunchbox::Monitor< uint32_t > Listener;
         typedef std::vector< Listener* > Listeners;
         /** External monitors for readiness synchronization. */
-        co::base::Lockable< Listeners, co::base::SpinLock > _listeners;
+        lunchbox::Lockable< Listeners, lunchbox::SpinLock > _listeners;
 
         bool _useAlpha;
         float _colorQuality;
@@ -363,7 +371,7 @@ namespace server { class FrameData; }
         /** Set a specific version ready. */
         void _setReady( const uint64_t version );
 
-        EQ_TS_VAR( _commandThread );
+        LB_TS_VAR( _commandThread );
     };
 
     /** Print the frame data to the given output stream. @version 1.0 */

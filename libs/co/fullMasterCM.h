@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2007-2011, Stefan Eilemann <eile@equalizergraphics.com> 
+/* Copyright (c) 2007-2012, Stefan Eilemann <eile@equalizergraphics.com> 
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -18,7 +18,7 @@
 #ifndef CO_FULLMASTERCM_H
 #define CO_FULLMASTERCM_H
 
-#include "masterCM.h"        // base class
+#include "versionedMasterCM.h"        // base class
 #include "objectInstanceDataOStream.h" // member
 
 #include <deque>
@@ -32,7 +32,7 @@ namespace co
      * instance.
      * @internal
      */
-    class FullMasterCM : public MasterCM
+    class FullMasterCM : public VersionedMasterCM
     {
     public:
         FullMasterCM( Object* object );
@@ -49,22 +49,24 @@ namespace co
         virtual uint32_t getAutoObsolete() const { return _nVersions; }
         //@}
 
-        virtual void addSlave( Command& command,
-                               NodeMapObjectReplyPacket& reply );
-
         /** Speculatively send instance data to all nodes. */
         virtual void sendInstanceData( Nodes& nodes );
     
     protected:
         struct InstanceData
         {
-            InstanceData( const MasterCM* cm ) 
+            InstanceData( const VersionedMasterCM* cm ) 
                     : os( cm ), commitCount( 0 ) {}
 
             ObjectInstanceDataOStream os;
             uint32_t commitCount;
         };
         
+        virtual void _initSlave( NodePtr node, const uint128_t& version,
+                                 const NodeMapObjectPacket* packet,
+                                 NodeMapObjectSuccessPacket& success,
+                                 NodeMapObjectReplyPacket& reply );
+
         InstanceData* _newInstanceData();
         void _addInstanceData( InstanceData* data );
         void _releaseInstanceData( InstanceData* data );
@@ -74,6 +76,7 @@ namespace co
         void _checkConsistency() const;
 
         virtual bool isBuffered() const{ return true; }
+        virtual void _commit();
 
     private:
         /** The number of commits, needed for auto-obsoletion. */

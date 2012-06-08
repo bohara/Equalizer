@@ -19,9 +19,10 @@
 
 #include "connectionDescription.h"
 #include "global.h"
-#include "base/thread.h"
-#include "base/scopedMutex.h"
-#include "base/clock.h"
+
+#include <lunchbox/thread.h>
+#include <lunchbox/scopedMutex.h>
+#include <lunchbox/clock.h>
 
 #ifdef _WIN32
 #    include <winsock2.h>
@@ -74,12 +75,12 @@ static bool _parseAddress( ConnectionDescriptionPtr description,
     const int errcode = ::getaddrinfo( node, service, &hints, &res );
     if( 0 != errcode )
     {
-        EQERROR << "getaddrinfo : " << ::gai_strerror( errcode ) << std::endl;
+        LBERROR << "getaddrinfo : " << ::gai_strerror( errcode ) << std::endl;
         goto out;
     }
 
     if( NULL != res->ai_next )
-        EQWARN << "Multiple getaddrinfo results, using first." << std::endl;
+        LBWARN << "Multiple getaddrinfo results, using first." << std::endl;
 
     ::memcpy( (void *)&address, (const void *)res->ai_addr, res->ai_addrlen );
     ok = true;
@@ -91,23 +92,23 @@ out:
     return ok;
 }
 
-#ifdef EQ_GCC_4_5_OR_LATER
+#ifdef LB_GCC_4_5_OR_LATER
 #  pragma GCC diagnostic ignored "-Wunused-result"
 #endif
 
 static void notify( co::Connection::Notifier n )
 {
 #ifdef _WIN32
-    EQASSERT( NULL != n );
+    LBASSERT( NULL != n );
 
     SetEvent( n );
 #else
     static const uint64_t ONE = 1ULL;
 
-    EQASSERT( 0 <= n );
+    LBASSERT( 0 <= n );
 
-#   ifdef EQ_RELEASE_ASSERT
-    EQCHECK( ::write( n, (const void *)&ONE, sizeof(ONE) ) == sizeof(ONE) );
+#   ifdef LB_RELEASE_ASSERT
+    LBCHECK( ::write( n, (const void *)&ONE, sizeof(ONE) ) == sizeof(ONE) );
 #   else
     ::write( n, (const void *)&ONE, sizeof(ONE) );
 #   endif
@@ -117,16 +118,16 @@ static void notify( co::Connection::Notifier n )
 static void acknowledge( co::Connection::Notifier n )
 {
 #ifdef _WIN32
-    EQASSERT( NULL != n );
+    LBASSERT( NULL != n );
 
     ResetEvent( n );
 #else
-    EQASSERT( 0 <= n );
+    LBASSERT( 0 <= n );
 
     uint64_t dummy;
 
-#   ifdef EQ_RELEASE_ASSERT
-    EQCHECK( ::read( n, (void *)&dummy, sizeof(dummy) ) == sizeof(dummy) );
+#   ifdef LB_RELEASE_ASSERT
+    LBCHECK( ::read( n, (void *)&dummy, sizeof(dummy) ) == sizeof(dummy) );
 #   else
     ::read( n, (void *)&dummy, sizeof(dummy) );
 #   endif
@@ -138,7 +139,7 @@ class CTCP: public CCC
 public:
     virtual void init( )
     {
-        EQINFO << "UDT CCC: CTCP" << std::endl;
+        LBINFO << "UDT CCC: CTCP" << std::endl;
 
         m_bSlowStart = true;
         m_issthresh = 83333;
@@ -219,7 +220,7 @@ class CUDPBlast: public CCC
 public:
     virtual void init( )
     {
-        EQINFO << "UDT CCC: CUDPBlast" << std::endl;
+        LBINFO << "UDT CCC: CUDPBlast" << std::endl;
 
         m_dPktSndPeriod = 1000000;
         m_dCWndSize = 83333.0;
@@ -249,7 +250,7 @@ public:
  * For more info, see thread "threading model and real socket integration" on
  * the UDT open discussion list.
  */
-class UDTConnection::UDTConnectionThread : public base::Thread
+class UDTConnection::UDTConnectionThread : public lunchbox::Thread
 {
 public:
     UDTConnectionThread( UDTConnection *connection )
@@ -257,7 +258,7 @@ public:
         , _connection( connection )
         , _eid( UDT::ERROR )
     {
-        EQASSERT( _connection );
+        LBASSERT( _connection );
     }
     virtual ~UDTConnectionThread( );
 
@@ -283,8 +284,8 @@ UDTConnection::UDTConnection( )
 #endif
     , _poller( NULL )
 {
-#ifdef EQ_RELEASE_ASSERT
-    EQCHECK( UDT::ERROR != UDT::startup( ));
+#ifdef LB_RELEASE_ASSERT
+    LBCHECK( UDT::ERROR != UDT::startup( ));
 #else
     UDT::startup( );
 #endif
@@ -292,7 +293,7 @@ UDTConnection::UDTConnection( )
     _description->type = CONNECTIONTYPE_UDT;
     _description->bandwidth = 102400000; // 1Gbps
 
-    EQVERB << "New UDTConnection @" << (void *)this << std::endl;
+    LBVERB << "New UDTConnection @" << (void *)this << std::endl;
 }
 
 // caller: application
@@ -302,7 +303,7 @@ bool UDTConnection::connect( )
     CCC *cc = NULL;
     int len;
 
-    EQASSERT( CONNECTIONTYPE_UDT == _description->type );
+    LBASSERT( CONNECTIONTYPE_UDT == _description->type );
     if( STATE_CLOSED != _state )
         return false;
 
@@ -312,11 +313,11 @@ bool UDTConnection::connect( )
     if( !_parseAddress( _description, address, false ))
         goto err;
 
-    EQASSERT( UDT::INVALID_SOCK == _udt );
+    LBASSERT( UDT::INVALID_SOCK == _udt );
     _udt = UDT::socket( AF_INET, SOCK_STREAM, 0 );
     if( UDT::INVALID_SOCK == _udt )
     {
-        EQERROR << UDTLASTERROR( "UDT::socket" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::socket" ) << std::endl;
         goto err;
     }
 
@@ -325,7 +326,7 @@ bool UDTConnection::connect( )
 
     if( UDT::ERROR == UDT::connect( _udt, &address, sizeof( address )))
     {
-        EQERROR << UDTLASTERROR( "UDT::connect" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::connect" ) << std::endl;
         goto err;
     }
 
@@ -360,7 +361,7 @@ bool UDTConnection::listen( )
 {
     struct sockaddr address;
 
-    EQASSERT( CONNECTIONTYPE_UDT == _description->type );
+    LBASSERT( CONNECTIONTYPE_UDT == _description->type );
     if( STATE_CLOSED != _state )
         return false;
 
@@ -370,11 +371,11 @@ bool UDTConnection::listen( )
     if( !_parseAddress( _description, address, true ))
         goto err;
 
-    EQASSERT( UDT::INVALID_SOCK == _udt );
+    LBASSERT( UDT::INVALID_SOCK == _udt );
     _udt = UDT::socket( AF_INET, SOCK_STREAM, 0 );
     if( UDT::INVALID_SOCK == _udt )
     {
-        EQERROR << UDTLASTERROR( "UDT::socket" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::socket" ) << std::endl;
         goto err;
     }
 
@@ -383,13 +384,13 @@ bool UDTConnection::listen( )
 
     if( UDT::ERROR == UDT::bind( _udt, &address, sizeof( address )))
     {
-        EQERROR << UDTLASTERROR( "UDT::bind" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::bind" ) << std::endl;
         goto err;
     }
 
     if( UDT::ERROR == UDT::listen( _udt, SOMAXCONN ))
     {
-        EQERROR << UDTLASTERROR( "UDT::listen" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::listen" ) << std::endl;
         goto err;
     }
 
@@ -409,7 +410,7 @@ void UDTConnection::close( )
     UDTConnectionThread *poller = NULL;
 
     {
-        base::ScopedMutex<> mutex( _app_mutex );
+        lunchbox::ScopedMutex<> mutex( _app_mutex );
 
         if( STATE_CLOSED != _state )
         {
@@ -421,11 +422,11 @@ void UDTConnection::close( )
 
 #ifdef _WIN32
             if(( NULL != _notifier ) && ( 0 == CloseHandle( _notifier )))
-                EQWARN << "CloseHandle : " << base::sysError << std::endl;
+                LBWARN << "CloseHandle : " << lunchbox::sysError << std::endl;
             _notifier = NULL;
 #else
             if(( 0 <= _notifier ) && ( 0 != ::close( _notifier )))
-                EQWARN << "close : " << base::sysError << std::endl;
+                LBWARN << "close : " << lunchbox::sysError << std::endl;
             _notifier = -1;
 #endif
 
@@ -447,7 +448,7 @@ void UDTConnection::close( )
         poller = NULL;
 
         if( UDT::ERROR == UDT::close( _udt ))
-            EQWARN << UDTLASTERROR( "UDT::close" ) << std::endl;
+            LBWARN << UDTLASTERROR( "UDT::close" ) << std::endl;
         _udt = UDT::INVALID_SOCK;
     }
 }
@@ -465,7 +466,7 @@ ConnectionPtr UDTConnection::acceptSync( )
 
     if( UDT::INVALID_SOCK == newSocket )
     {
-        EQERROR << UDTLASTERROR( "UDT::accept" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::accept" ) << std::endl;
         close( );
         goto err;
     }
@@ -502,7 +503,7 @@ err:
 
 out:
     // Let the event thread continue polling
-    base::ScopedMutex<> mutex( _app_mutex );
+    lunchbox::ScopedMutex<> mutex( _app_mutex );
 
     _app_block.set( true );
 
@@ -523,7 +524,7 @@ int64_t UDTConnection::readSync( void* buffer, const uint64_t bytes,
         if( UDT::ERRORINFO::EASYNCRCV == UDT::getlasterror( ).getErrorCode( ))
             return 0LL;
 
-        EQWARN << UDTLASTERROR( "UDT::recv" ) << std::endl;
+        LBWARN << UDTLASTERROR( "UDT::recv" ) << std::endl;
         close( );
         return -1LL;
     }
@@ -532,7 +533,7 @@ int64_t UDTConnection::readSync( void* buffer, const uint64_t bytes,
 
     int avail, len;
     if( UDT::ERROR == UDT::getsockopt( _udt, 0, UDT_RCVDATA, &avail, &len ))
-        EQWARN << UDTLASTERROR( "UDT::getsockopt" ) << std::endl;
+        LBWARN << UDTLASTERROR( "UDT::getsockopt" ) << std::endl;
 
     if( avail > 0 )
     {
@@ -542,7 +543,7 @@ int64_t UDTConnection::readSync( void* buffer, const uint64_t bytes,
     else
     {
         // Let the event thread continue polling
-        base::ScopedMutex<> mutex( _app_mutex );
+        lunchbox::ScopedMutex<> mutex( _app_mutex );
 
         _app_block.set( true );
     }
@@ -558,7 +559,7 @@ int64_t UDTConnection::write( const void* buffer, const uint64_t bytes )
 
     if( UDT::ERROR == sent )
     {
-        EQWARN << UDTLASTERROR( "UDT::send" ) << std::endl;
+        LBWARN << UDTLASTERROR( "UDT::send" ) << std::endl;
         close( );
         return -1LL;
     }
@@ -581,14 +582,14 @@ bool UDTConnection::initialize( )
     _notifier = CreateEvent( 0, TRUE, FALSE, 0 );
     if( NULL == _notifier )
     {
-        EQERROR << "CreateEvent : " << base::sysError << std::endl;
+        LBERROR << "CreateEvent : " << lunchbox::sysError << std::endl;
         goto err;
     }
 #else
     _notifier = ::eventfd( 0, 0 );
     if( 0 > _notifier )
     {
-        EQERROR << "eventfd : " << base::sysError << std::endl;
+        LBERROR << "eventfd : " << lunchbox::sysError << std::endl;
         goto err;
     }
 #endif
@@ -606,7 +607,7 @@ void UDTConnection::wake( )
     bool notifyAndWait = false;
 
     {
-        base::ScopedMutex<> mutex( _app_mutex );
+        lunchbox::ScopedMutex<> mutex( _app_mutex );
 
         // Only block if we're not shutting down
         if(( STATE_LISTENING == _state ) || ( STATE_CONNECTED == _state ))
@@ -682,7 +683,7 @@ bool UDTConnection::setSockOpt( UDT::SOCKOPT optname, const void *optval,
 {
     if( UDT::ERROR == UDT::setsockopt( _udt, 0, optname, optval, optlen ))
     {
-        EQERROR << UDTLASTERROR( "UDT::setsockopt" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::setsockopt" ) << std::endl;
         return false;
     }
 
@@ -694,16 +695,16 @@ bool UDTConnection::setSockOpt( UDT::SOCKOPT optname, const void *optval,
 // caller: application
 UDTConnection::UDTConnectionThread::~UDTConnectionThread( )
 {
-    EQASSERT( !_running );
+    LBASSERT( !_running );
 
     if( UDT::ERROR != _eid )
     {
-        EQASSERT( UDT::INVALID_SOCK != _connection->_udt );
+        LBASSERT( UDT::INVALID_SOCK != _connection->_udt );
         if( UDT::ERROR == UDT::epoll_remove_usock( _eid, _connection->_udt ))
-            EQWARN << UDTLASTERROR( "UDT::epoll_remove_usock" ) << std::endl;
+            LBWARN << UDTLASTERROR( "UDT::epoll_remove_usock" ) << std::endl;
 
         if( UDT::ERROR == UDT::epoll_release( _eid ))
-            EQWARN << UDTLASTERROR( "UDT::epoll_release" ) << std::endl;
+            LBWARN << UDTLASTERROR( "UDT::epoll_release" ) << std::endl;
     }
     _eid = UDT::ERROR;
 }
@@ -711,21 +712,21 @@ UDTConnection::UDTConnectionThread::~UDTConnectionThread( )
 // caller: application
 bool UDTConnection::UDTConnectionThread::init( )
 {
-    EQASSERT( !_running );
+    LBASSERT( !_running );
 
     // Create the UDT epoll identifier
     _eid = UDT::epoll_create( );
     if( UDT::ERROR == _eid )
     {
-        EQERROR << UDTLASTERROR( "UDT::epoll_create" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::epoll_create" ) << std::endl;
         goto out;
     }
 
     // Add the connection's UDT socket to the UDT udtsock poll
-    EQASSERT( UDT::INVALID_SOCK != _connection->_udt );
+    LBASSERT( UDT::INVALID_SOCK != _connection->_udt );
     if( UDT::ERROR == UDT::epoll_add_usock( _eid, _connection->_udt ))
     {
-        EQERROR << UDTLASTERROR( "UDT::epoll_add_usock" ) << std::endl;
+        LBERROR << UDTLASTERROR( "UDT::epoll_add_usock" ) << std::endl;
         goto out;
     }
 
@@ -745,7 +746,7 @@ void UDTConnection::UDTConnectionThread::run( )
         if( UDT::ERROR ==
             UDT::epoll_wait( _eid, &udtfds, NULL, UDT_POLL_INT, NULL, NULL ))
         {
-            EQERROR << UDTLASTERROR( "UDT::epoll_wait" ) << std::endl;
+            LBERROR << UDTLASTERROR( "UDT::epoll_wait" ) << std::endl;
 
             _connection->wake( );
             break; // TODO: ???
@@ -754,8 +755,8 @@ void UDTConnection::UDTConnectionThread::run( )
         // UDT indicating ready-to-read
         if( !udtfds.empty( ))
         {
-            EQASSERT( 1 == udtfds.size( ));
-            EQASSERT( *(udtfds.begin( )) == _connection->_udt );
+            LBASSERT( 1 == udtfds.size( ));
+            LBASSERT( *(udtfds.begin( )) == _connection->_udt );
 
             _connection->wake( );
         }

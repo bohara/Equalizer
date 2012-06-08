@@ -71,10 +71,12 @@
 #include <co/dataIStreamArchive.h>
 #include <co/dataOStream.h>
 #include <co/dataOStreamArchive.h>
+#include <co/errorRegistry.h>
 #include <co/global.h>
 #include <co/init.h>
 #include <co/object.h>
 #include <co/serializable.h>
-#include <co/base/base.h>
+#include <co/zeroconf.h>
+#include <lunchbox/lunchbox.h>
 
 #endif // CO_H

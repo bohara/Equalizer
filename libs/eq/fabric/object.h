@@ -77,7 +77,7 @@ namespace fabric
         EQFABRIC_API void setError( const int32_t error );
 
         /** @return the error from the last failed operation. @version 1.0 */
-        co::base::Error getError() const { return _error; }
+        co::Error getError() const { return _error; }
         //@}
 
         /** @name Data Access */
@@ -165,7 +165,7 @@ namespace fabric
         EQFABRIC_API void postRemove( Object* child );
 
         /** @internal Execute the slave remove request. @sa postRemove */
-        virtual void removeChild( const co::base::UUID& ) { EQUNIMPLEMENTED; }
+        virtual void removeChild( const UUID& ) { LBUNIMPLEMENTED; }
 
         /** @internal commit, register child slave instance with the server. */
         template< class C, class PKG, class S >
@@ -175,7 +175,7 @@ namespace fabric
         template< class C > inline 
         void commitChild( C* child, const uint32_t incarnation )
             {
-                EQASSERT( child->isAttached( ));
+                LBASSERT( child->isAttached( ));
                 child->commit( incarnation );
             }
 
@@ -224,13 +224,13 @@ namespace fabric
         uint32_t _tasks;
 
         /** The reason for the last error. */
-        co::base::Error _error;
+        co::Error _error;
 
         /** Server-unique serial number. */
         uint32_t _serial;
 
         /** The identifiers of removed children since the last slave commit. */
-        std::vector< co::base::UUID > _removedChildren;
+        std::vector< UUID > _removedChildren;
 
         struct Private;
         Private* _private; // placeholder for binary-compatible changes
@@ -242,7 +242,7 @@ namespace fabric
     {
         if( !child->isAttached( ))
         {
-            EQASSERT( !isMaster( ));
+            LBASSERT( !isMaster( ));
             co::LocalNodePtr localNode = child->getConfig()->getLocalNode();
             PKG packet( localNode->registerRequest( ));
 
@@ -251,7 +251,7 @@ namespace fabric
 
             uint128_t identifier;
             localNode->waitRequest( packet.requestID, identifier );
-            EQCHECK( localNode->mapObject( child,identifier,co::VERSION_NONE ));
+            LBCHECK( localNode->mapObject( child,identifier,co::VERSION_NONE ));
         }
         child->commit( incarnation );
     }
@@ -278,7 +278,7 @@ namespace fabric
              i != children.end(); ++i )
         {
             C* child = *i;
-            EQASSERT( child->isAttached( ));
+            LBASSERT( child->isAttached( ));
             child->commit( incarnation );
         }
     }
@@ -290,7 +290,7 @@ namespace fabric
              i != children.end(); ++i )
         {
             C* child = *i;
-            EQASSERT( child->isMaster( )); // slaves are synced using version
+            LBASSERT( child->isMaster( )); // slaves are synced using version
             child->sync();
         }
     }
@@ -313,7 +313,7 @@ namespace fabric
             }
             else
             {
-                EQASSERT( isMaster( ));
+                LBASSERT( isMaster( ));
             }
         }
     }
