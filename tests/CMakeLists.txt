@@ -1,7 +1,7 @@
 # Copyright (c) 2010 Daniel Pfeifer
 #               2010-2012, Stefan Eilemann <eile@eyescale.ch>
 #
-# Change this number when adding tests to force a CMake run: 9
+# Change this number when adding tests to force a CMake run: 0
 
 option(EQUALIZER_BUILD_TESTS "Build Equalizer unit tests." ON)
 option(EQUALIZER_RUN_GPU_TESTS "Run Equalizer unit tests using a GPU." OFF)
@@ -50,9 +50,6 @@ foreach(FILE ${TEST_FILES})
     add_executable(${NAME} ${FILE})
     set_target_properties(${NAME} PROPERTIES FOLDER "Tests")
 
-    if(${NAME} MATCHES "co_.*")
-      target_link_libraries(${NAME} lib_Collage_shared)
-    endif()
     if(${NAME} MATCHES "eq_.*")
       target_link_libraries(${NAME} lib_Equalizer_shared)
     endif()
@@ -74,7 +71,7 @@ foreach(FILE ${TEST_FILES})
       add_test(${NAME} ${EXECUTABLE})
       if(APPLE)
         set_property(TEST ${NAME} PROPERTY ENVIRONMENT
-          "DYLD_LIBRARY_PATH=${LUNCHBOX_LIBRARY_DIR}:$ENV{DYLD_LIBRARY_PATH}"
+          "DYLD_LIBRARY_PATH=${LUNCHBOX_LIBRARY_DIRS}:$ENV{DYLD_LIBRARY_PATH}"
           )
       endif()
     endif()

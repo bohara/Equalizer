@@ -27,6 +27,7 @@
 #include "error.h"
 #include "frame.h"
 #include "frameData.h"
+#include "gl.h"
 #include "global.h"
 #include "image.h"
 #include "jitter.h"
@@ -1056,7 +1057,7 @@ void Channel::drawStatistics()
             if( data.yPos == 0 )
             {
                 data.yPos = nextY;
-                nextY -= data.threads.count() * (HEIGHT + SPACE);
+                nextY -= uint32_t( data.threads.count() * (HEIGHT + SPACE) );
             }
 
             uint32_t y = data.yPos;
@@ -1079,8 +1080,8 @@ void Channel::drawStatistics()
                   case Statistic::CHANNEL_FRAME_TRANSMIT:
                   case Statistic::CHANNEL_FRAME_COMPRESS:
                   case Statistic::CHANNEL_FRAME_WAIT_SENDTOKEN:
-                    y = data.yPos -
-                        (data.threads.count() - 1) * (HEIGHT + SPACE);
+                    y = data.yPos - uint32_t( (data.threads.count() - 1) *
+                                              (HEIGHT + SPACE));
                     break;
                 default:
                     break;
@@ -1357,10 +1358,10 @@ struct RBStat
     size_t compressed;
 
     void ref( void* ) { ++_refCount; }
-    void unref( void* )
+    bool unref( void* )
         {
             if( --_refCount > 0 )
-                return;
+                return false;
 
             if( uncompressed > 0 && compressed > 0 )
                 event.event.data.statistic.ratio = float( compressed ) /
@@ -1368,6 +1369,7 @@ struct RBStat
             else
                 event.event.data.statistic.ratio = 1.0f;
             delete this;
+            return true;
         }
 
     int32_t getRefCount() const { return _refCount; }
@@ -1401,7 +1403,7 @@ void Channel::_frameTiles( const ChannelFrameTilesPacket* packet )
 
     co::QueueSlave* queue = _getQueue( packet->queueVersion );
     LBASSERT( queue );
-    for( co::Command* queuePacket = queue->pop(); queuePacket;
+    for( co::CommandPtr queuePacket = queue->pop(); queuePacket;
          queuePacket = queue->pop( ))
     {
         const TileTaskPacket* tilePacket = queuePacket->get<TileTaskPacket>();
@@ -1433,9 +1435,9 @@ void Channel::_frameTiles( const ChannelFrameTilesPacket* packet )
         if( packet->tasks & fabric::TASK_READBACK )
         {
             const int64_t time = getConfig()->getTime();
-
             const Frames& frames = getOutputFrames();
             const size_t nFrames = frames.size();
+
             std::vector< size_t > nImages( nFrames, 0 );
             for( size_t i = 0; i < nFrames; ++i )
             {
@@ -1463,7 +1465,6 @@ void Channel::_frameTiles( const ChannelFrameTilesPacket* packet )
             if( _asyncFinishReadback( nImages ))
                 hasAsyncReadback = true;
         }
-        queuePacket->release();
     }
 
     if( packet->tasks & fabric::TASK_CLEAR )
@@ -1489,6 +1490,7 @@ void Channel::_frameTiles( const ChannelFrameTilesPacket* packet )
         stat->event.event.data.statistic.endTime = startTime;
 
         _setReady( hasAsyncReadback, stat.get( ));
+        _resetOutputFrames();
     }
 
     frameTilesFinish( packet->context.frameID );
@@ -1527,10 +1529,16 @@ void Channel::_setOutputFrames( const uint32_t nFrames,
                                 const co::ObjectVersion* frames )
 {
     LB_TS_THREAD( _pipeThread );
+    LBASSERT( _impl->outputFrames.empty( ))
+
     for( uint32_t i=0; i<nFrames; ++i )
     {
         Pipe*  pipe  = getPipe();
         Frame* frame = pipe->getFrame( frames[i], getEye(), true );
+        LBASSERTINFO( stde::find( _impl->outputFrames, frame ) ==
+                      _impl->outputFrames.end(),
+                      "frame " << i << " " << frames[i] );
+
         _impl->outputFrames.push_back( frame );
     }
 }
@@ -1600,7 +1608,7 @@ bool Channel::_asyncFinishReadback( const std::vector< size_t >& imagePos )
                 packet.frameData = frameData;
                 packet.frameNumber = frameNumber;
                 packet.imageIndex = j;
-                packet.nNodes = nodes.size();
+                packet.nNodes = uint32_t( nodes.size( ));
 
                 std::vector< uint128_t > ids = nodes;
                 ids.insert( ids.end(), netNodes.begin(), netNodes.end( ));
@@ -1699,7 +1707,7 @@ void Channel::_transmitImage( const ChannelFrameTransmitImagePacket* request )
 
     co::LocalNodePtr localNode = getLocalNode();
     co::NodePtr toNode = localNode->connect( request->netNodeID );
-    if( !toNode || !toNode->isConnected( ))
+    if( !toNode || !toNode->isReachable( ))
     {
         LBWARN << "Can't connect node " << request->netNodeID
                << " to send image data" << std::endl;
@@ -1707,7 +1715,7 @@ void Channel::_transmitImage( const ChannelFrameTransmitImagePacket* request )
     }
 
     co::ConnectionPtr connection = toNode->getConnection();
-    co::ConnectionDescriptionPtr description = connection->getDescription();
+    co::ConstConnectionDescriptionPtr description =connection->getDescription();
 
     // use compression on links up to 2 GBit/s
     const bool useCompression = ( description->bandwidth <= 262144 );
@@ -1886,7 +1894,7 @@ void Channel::_asyncSetReady( const FrameDataPtr frame, detail::RBStat* stat,
     std::vector< uint128_t > ids = nodes;
     ids.insert( ids.end(), netNodes.begin(), netNodes.end( ));
 
-    ChannelFrameSetReadyPacket packet( frame, stat, nodes.size( ));
+    ChannelFrameSetReadyPacket packet( frame, stat, uint32_t( nodes.size( )));
     send( getLocalNode(), packet, ids );
 }
 
@@ -2108,8 +2116,8 @@ bool Channel::_cmdFrameAssemble( co::Command& command )
 {
     ChannelFrameAssemblePacket* packet = 
         command.getModifiable< ChannelFrameAssemblePacket >();
-    LBLOG( LOG_TASKS | LOG_ASSEMBLY ) << "TASK assemble " << getName() <<  " " 
-                                      << packet << std::endl;
+    LBLOG( LOG_TASKS | LOG_ASSEMBLY )
+        << "TASK assemble " << getName() <<  " " << packet << std::endl;
 
     _setRenderContext( packet->context );
     ChannelStatistics event( Statistic::CHANNEL_ASSEMBLE, this );
@@ -2118,21 +2126,14 @@ bool Channel::_cmdFrameAssemble( co::Command& command )
         Pipe*  pipe  = getPipe();
         Frame* frame = pipe->getFrame( packet->frames[i], getEye(), false );
         _impl->inputFrames.push_back( frame );
+        LBLOG( LOG_ASSEMBLY ) << *frame << " " << *frame->getFrameData()
+                              << std::endl;
     }
 
     frameAssemble( packet->context.frameID );
 
-    for( FramesCIter i = _impl->inputFrames.begin();
-         i != _impl->inputFrames.end(); ++i )
-    {
-        // Unset the frame data on input frames, so that they only get flushed
-        // once by the output frames during exit.
-        // TODO: review with #124
-        (*i)->setFrameData( 0 );
-    }
     _impl->inputFrames.clear();
     resetRenderContext();
-
     return true;
 }
 

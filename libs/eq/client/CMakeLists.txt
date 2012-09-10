@@ -16,10 +16,15 @@ include(compressor/files.cmake)
 
 add_definitions(-DEQ_PLUGIN_BUILD)
 
-set(EQ_LIBRARIES)
+set(EQ_LIBRARIES ${PTHREAD_LIBRARIES})
 if(MAGELLAN_FOUND)
   include_directories(${MAGELLAN_INCLUDE_DIR})
   list(APPEND EQ_LIBRARIES ${MAGELLAN_LIBRARY})
+endif()
+
+if(HWLOC_GL_FOUND)
+  include_directories(${HWLOC_INCLUDE_DIRS})
+  list(APPEND CO_ADD_LINKLIB ${HWLOC_LIBRARIES})
 endif()
 
 if(APPLE)
@@ -67,3 +72,4 @@ if(EQUALIZER_OLD_CLIENT_LAYOUT)
   install(FILES ${CLIENT_HEADERS} DESTINATION include/eq/ COMPONENT eqdev)
 endif()
 
+install(FILES ${OPTIONS_CMAKE} DESTINATION share/Equalizer/CMake COMPONENT dev)

@@ -23,8 +23,6 @@
 
 #include <co/node.h>
 
-#include "../../co/pipeConnection.h" // private header
-
 #define CONFIG "server{ config{ appNode{ pipe {                            \
     window { viewport [ .25 .25 .5 .5 ] channel { name \"channel\" }}}}    \
     compound { channel \"channel\" wall { }}}}"
@@ -101,9 +99,12 @@ extern "C" EQSERVER_API co::ConnectionPtr eqsStartLocalServer(
     eq::server::Loader::addDefaultObserver( server );
     eq::server::Loader::convertTo11( server );
     eq::server::Loader::convertTo12( server );
-    LBASSERTINFO( server->getRefCount() == 1, server );
+    // TODO: ref count is 2 since config holds ServerPtr
+    // LBASSERTINFO( server->getRefCount() == 1, server );
 
-    co::PipeConnectionPtr connection = new co::PipeConnection;
+    co::ConnectionDescriptionPtr desc = new co::ConnectionDescription;
+    desc->type = co::CONNECTIONTYPE_PIPE;
+    co::ConnectionPtr connection = co::Connection::create( desc );
     if( !connection->connect( ))
     {
         LBERROR << "Failed to set up server connection" << std::endl;
