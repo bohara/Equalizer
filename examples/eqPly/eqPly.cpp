@@ -149,8 +149,7 @@ int EqPly::run()
                                << ( nFrames / time * 1000.f) << " FPS)"
                                << std::endl;
 #ifdef BENCHMARK
-            outputFrameFile << config->getNPipes() << ", "
-                            << nFrames / time * 1000.f << std::endl;
+            outputFrameFile << nFrames / time * 1000.f << std::endl;
 #endif
            
         }
