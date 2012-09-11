@@ -1,5 +1,6 @@
 
 /* Copyright (c) 2005-2012, Stefan Eilemann <eile@equalizergraphics.com>
+ *               2011-2012, Daniel Nachbaur <danielnachbaur@gmail.com>
  *                    2010, Cedric Stalder <cedric.stalder@gmail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -38,7 +39,6 @@
 #include "view.h"
 #include "observer.h"
 
-#include <eq/client/packets.h>
 #include <eq/fabric/paths.h>
 #include <lunchbox/os.h>
 #include <lunchbox/stdExt.h>

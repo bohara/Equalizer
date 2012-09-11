@@ -1,6 +1,7 @@
 
 /* Copyright (c) 2005-2012, Stefan Eilemann <eile@equalizergraphics.com>
- *                    2010, Cedric Stalder <cedric.stalder@gmail.com> 
+ *                    2010, Cedric Stalder <cedric.stalder@gmail.com>
+ *               2010-2011, Daniel Nachbaur <danielnachbaur@gmail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -121,7 +122,7 @@ namespace detail { class Pipe; class RenderThread; }
                          const Eye eye, const bool output );
 
         /** @internal @return the queue for the given identifier and version. */
-        co::QueueSlave* getQueue( const co::ObjectVersion& queueVersion );
+        co::QueueSlave* getQueue( const UUID& queueID );
 
         /** @internal Clear the frame cache and delete all frames. */
         void flushFrames( ObjectManager* om );

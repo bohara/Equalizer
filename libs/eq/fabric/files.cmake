@@ -1,23 +1,22 @@
 # Copyright (c) 2010 Daniel Pfeifer <daniel@pfeifer-mail.de>
 #               2010-2012 Stefan Eilemann <eile@eyescale.ch>
+#                    2012 Daniel Nachbaur <danielnachbaur@gmail.com>
 
 set(EQ_FABRIC_PUBLIC_HEADERS
   api.h
   base.h
   canvas.h
-  canvasPackets.h
   channel.h
   client.h
   colorMask.h
   commands.h
   config.h
-  configPackets.h
   configVisitor.h
   defines.h
   drawableConfig.h
   elementVisitor.h
   equalizerTypes.h
-  error.h 
+  error.h
   errorRegistry.h
   eye.h
   focusMode.h
@@ -28,30 +27,25 @@ set(EQ_FABRIC_PUBLIC_HEADERS
   iAttribute.h
   init.h
   layout.h
-  layoutPackets.h
   leafVisitor.h
   log.h
   node.h
   nodeType.h
   object.h
   observer.h
-  packetType.h
-  packets.h
   paths.h
   pipe.h
-  pipePackets.h
   pixel.h
   pixelViewport.h
   projection.h
-  queuePackets.h
   range.h
   renderContext.h
   segment.h
   server.h
-  serverPackets.h
   subPixel.h
   swapBarrier.h
   task.h
+  tile.h
   types.h
   view.h
   viewport.h
@@ -59,7 +53,6 @@ set(EQ_FABRIC_PUBLIC_HEADERS
   vmmlib.h
   wall.h
   window.h
-  windowPackets.h
   zoom.h
   )
 
