@@ -513,6 +513,10 @@ bool Config::handleEvent( const eq::ConfigEvent* event )
                 _numFramesAA = 0;
             return false;
 
+        case ConfigEvent::PIPE:
+            _pipes.insert( event->data.originator );
+            return false;
+
         default:
             break;
     }

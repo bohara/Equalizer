@@ -67,6 +67,9 @@ const LocalInitData& LocalInitData::operator = ( const LocalInitData& from )
     _isResident  = from._isResident;
     _filenames    = from._filenames;
     _pathFilename = from._pathFilename;
+    _multiProcess = from._multiProcess;
+    _multiProcessDB = from._multiProcessDB;
+
 
     setWindowSystem( from.getWindowSystem( ));
     setRenderMode( from.getRenderMode( ));
@@ -142,6 +145,12 @@ void LocalInitData::parseArguments( const int argc, char** argv )
                         command );
         TCLAP::SwitchArg roiArg( "d", "disableROI", "Disable ROI", command,
                                  false );
+        TCLAP::SwitchArg mpArg( "f", "multiProcess",
+                            "Use one process per pipe during auto-configuration",
+                                command, false );
+        TCLAP::SwitchArg mpDBArg( "s", "multiProcessDB",
+                                    "Use one process per pipe during auto-configuration ( with DB decomposition )",
+                                        command, false );
 
         command.parse( argc, argv );
 
@@ -194,6 +203,10 @@ void LocalInitData::parseArguments( const int argc, char** argv )
             disableLogo();
         if( roiArg.isSet( ))
             disableROI();
+        if( mpArg.isSet( ))
+            _multiProcess = true;
+        if( mpDBArg.isSet( ))
+            _multiProcessDB = true;
     }
     catch( const TCLAP::ArgException& exception )
     {
