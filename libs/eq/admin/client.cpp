@@ -60,7 +60,7 @@ co::NodePtr Client::createNode( const uint32_t type )
 { 
     switch( type )
     {
-        case fabric::NODETYPE_EQ_SERVER:
+        case fabric::NODETYPE_SERVER:
         {
             Server* server = new Server;
             server->setClient( this );

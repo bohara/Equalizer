@@ -1,5 +1,6 @@
 
-/* Copyright (c) 2005-2012, Stefan Eilemann <eile@equalizergraphics.com> 
+/* Copyright (c) 2005-2012, Stefan Eilemann <eile@equalizergraphics.com>
+ *                    2012, Daniel Nachbaur <danielnachbaur@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -148,8 +149,7 @@ int EqPly::run()
                                << ( nFrames / time * 1000.f) << " FPS)"
                                << std::endl;
 #ifdef BENCHMARK
-            outputFrameFile << config->getNPipes() << ", "
-                            << nFrames / time * 1000.f << std::endl;
+            outputFrameFile << nFrames / time * 1000.f << std::endl;
 #endif
            
         }
@@ -163,7 +163,7 @@ int EqPly::run()
             }
             else  // no pending commands, block on user event
             {
-                const eq::ConfigEvent* event = config->nextEvent();
+                const eq::EventCommand& event = config->getNextEvent();
                 if( !config->handleEvent( event ))
                     LBVERB << "Unhandled " << event << std::endl;
             }

@@ -39,6 +39,7 @@ namespace fabric
     {
     public:
         EQFABRIC_API RenderContext();
+        EQFABRIC_API void apply( const Tile& tile ); //!< @internal
 
         Frustumf       frustum;        //!< frustum for projection matrix
         Frustumf       ortho;          //!< ortho frustum for projection matrix
@@ -73,4 +74,37 @@ namespace fabric
                                              const RenderContext& ctx );
 }
 }
+
+namespace lunchbox
+{
+template<> inline void byteswap( eq::fabric::RenderContext& value )
+{
+    byteswap( value.frustum );
+    byteswap( value.ortho );
+
+    byteswap( value.headTransform );
+    byteswap( value.orthoTransform );
+
+    byteswap( value.view );
+    byteswap( value.frameID );
+    byteswap( value.pvp );
+    byteswap( value.pixel );
+    byteswap( value.overdraw );
+    byteswap( value.vp );
+
+    byteswap( value.offset );
+    byteswap( value.range );
+    byteswap( value.subpixel );
+    byteswap( value.zoom );
+
+    byteswap( value.buffer );
+    byteswap( value.taskID );
+    byteswap( value.period );
+    byteswap( value.phase );
+    byteswap( value.eye );
+
+    byteswap( value.bufferMask );
+}
+}
+
 #endif // EQFABRIC_RENDERCONTEXT_H

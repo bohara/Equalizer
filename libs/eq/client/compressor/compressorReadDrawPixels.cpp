@@ -1,6 +1,7 @@
 
 /* Copyright (c) 2010, Cedric Stalder <cedric.stalder@equalizergraphics.com>
  *               2010-2012, Stefan Eilemann <eile@eyescale.ch>
+ *               2010-2011, Daniel Nachbaur <danielnachbaur@gmail.com>
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License version 2.1 as published
@@ -18,6 +19,7 @@
 
 #include "compressorReadDrawPixels.h"
 
+#include <eq/fabric/pixelViewport.h>
 #include <eq/util/texture.h>
 #include <eq/util/pixelBufferObject.h>
 #include <lunchbox/buffer.h>
@@ -476,20 +478,23 @@ void CompressorReadDrawPixels::finishDownload( const GLEWContext* glewContext,
     _copy4( outDims, inDims );
 
 #ifdef EQ_ASYNC_PBO
-    if( (flags&EQ_COMPRESSOR_USE_FRAMEBUFFER) && _pbo && _pbo->isInitialized( ))
+    if( (flags & EQ_COMPRESSOR_USE_FRAMEBUFFER) &&
+         _pbo && _pbo->isInitialized( ))
     {
         const eq_uint64_t size = inDims[1] * inDims[3] * _depth;
         _resizeBuffer( size );
 
         const void* ptr = _pbo->mapRead();
         if( ptr )
+        {
             memcpy( _buffer.getData(), ptr, size );
+            _pbo->unmap();
+        }
         else
         {
             LBERROR << "Can't map PBO: " << _pbo->getError()<< std::endl;
             EQ_GL_ERROR( "PixelBufferObject::mapRead()" );
         }
-        _pbo->unmap();
     }
 #else  // async RB through texture
     if( flags & EQ_COMPRESSOR_USE_FRAMEBUFFER )
