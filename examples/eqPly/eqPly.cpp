@@ -164,7 +164,7 @@ int EqPly::run()
             }
             else  // no pending commands, block on user event
             {
-                const eq::ConfigEvent* event = config->nextEvent();
+                const eq::EventCommand& event = config->getNextEvent();
                 if( !config->handleEvent( event ))
                     LBVERB << "Unhandled " << event << std::endl;
             }

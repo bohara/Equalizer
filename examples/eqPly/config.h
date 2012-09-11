@@ -40,8 +40,6 @@
 #include <eq/eq.h>
 #include <eq/admin/base.h>
 
-#include <set>
-
 namespace eqPly
 {
     class View;
@@ -87,9 +85,6 @@ namespace eqPly
         /** @return the current animation frame number. */
         uint32_t getAnimationFrame();
 
-        /** @return the number of pipes having done a successful configInit. */
-        size_t getNPipes() const { return _pipes.size(); }
-
     protected:
         virtual ~Config();
 
@@ -121,8 +116,6 @@ namespace eqPly
         int32_t _numFramesAA;
 
         eq::admin::ServerPtr _admin;
-
-        std::set< eq::uint128_t > _pipes;
 
         void _loadModels();
         void _registerModels();

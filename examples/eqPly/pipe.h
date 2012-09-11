@@ -49,7 +49,7 @@ namespace eqPly
     public:
         Pipe( eq::Node* parent ) : eq::Pipe( parent ) {}
 
-        FrameData& getFrameData() { return _frameData; }
+		FrameData& getFrameData() { return _frameData; }
         const FrameData& getFrameData() const { return _frameData; }
 
     protected:

@@ -531,10 +531,6 @@ bool Config::handleEvent( eq::EventCommand command )
                 _numFramesAA = 0;
             return false;
 
-        case ConfigEvent::PIPE:
-            _pipes.insert( event->data.originator );
-            return false;
-
         default:
             break;
     }
