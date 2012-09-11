@@ -1,4 +1,4 @@
-* Copyright (c) 2009-2012, Stefan Eilemann <eile@equalizergraphics.com>
+/* Copyright (c) 2009-2012, Stefan Eilemann <eile@equalizergraphics.com>
 * 2012, Daniel Nachbaur <danielnachbaur@gmail.com>
 * 2009, Sarah Amsellem <sarah.amsellem@gmail.com>
 *
