@@ -33,7 +33,7 @@
 #include <eq/fabric/nodeType.h>
 #include <eq/fabric/view.h>
 
-#include <co/command.h>
+#include <co/iCommand.h>
 #include <co/connection.h>
 #include <co/connectionDescription.h>
 #include <co/global.h>
@@ -367,7 +367,7 @@ co::NodePtr Client::createNode( const uint32_t type )
     }
 }
 
-bool Client::_cmdExit( co::Command& command )
+bool Client::_cmdExit( co::ICommand& command )
 {
     _running = false;
     // Close connection here, this is the last command we'll get on it
@@ -394,7 +394,7 @@ void Client::notifyDisconnect( co::NodePtr node )
     if( node->getType() == fabric::NODETYPE_SERVER )
     {
         // local command dispatching
-        co::NodeOCommand( this, this, fabric::CMD_CLIENT_EXIT );
+        co::OCommand( this, this, fabric::CMD_CLIENT_EXIT );
 
         ServerPtr server = static_cast< Server* >( node.get( ));
         StopNodesVisitor stopNodes;

@@ -48,7 +48,6 @@
 #include <eq/fabric/task.h>
 #include <eq/fabric/tile.h>
 
-#include <co/command.h>
 #include <co/connectionDescription.h>
 #include <co/exception.h>
 #include <co/objectCommand.h>
@@ -1788,13 +1787,11 @@ void Channel::_transmitImage( const co::ObjectVersion& frameDataVersion,
 
     co::ObjectOCommand command( co::Connections( 1, connection ),
                                 fabric::CMD_NODE_FRAMEDATA_TRANSMIT,
-                                co::COMMANDTYPE_CO_OBJECT,
-                                nodeID, EQ_INSTANCE_ALL );
+                                co::COMMANDTYPE_OBJECT, nodeID,
+                                EQ_INSTANCE_ALL );
     command << frameDataVersion << image->getPixelViewport() << image->getZoom()
             << commandBuffers << frameNumber << image->getAlphaUsage();
-
-    connection->lockSend();
-    command.sendHeaderUnlocked( imageDataSize );
+    command.sendHeader( imageDataSize );
 
 #ifndef NDEBUG
     size_t sentBytes = 0;
@@ -1846,7 +1843,6 @@ void Channel::_transmitImage( const co::ObjectVersion& frameDataVersion,
         sentBytes << " != " << imageDataSize );
 #endif
 
-    connection->unlockSend();
     getLocalNode()->releaseSendToken( token );
 }
 
@@ -2232,7 +2228,7 @@ bool Channel::_cmdFrameSetReadyNode( co::Command& cmd )
         co::NodePtr toNode = localNode->connect( *j );
         co::ObjectOCommand( co::Connections( 1, toNode->getConnection( )),
                             fabric::CMD_NODE_FRAMEDATA_READY,
-                            co::COMMANDTYPE_CO_OBJECT, *i, EQ_INSTANCE_ALL )
+                            co::COMMANDTYPE_OBJECT, *i, EQ_INSTANCE_ALL )
             << frameDataVersion << frameData->_data;
     }
 
