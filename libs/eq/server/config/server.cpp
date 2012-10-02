@@ -132,7 +132,8 @@ static void _setNetwork( const Config* config, const co::ConnectionType type,
         }
         else
         {
-            const std::string host = hostname.substr( 0, hostname.find( '.' ));
+            std::string host = hostname.substr( 0, hostname.find( '.' ));
+	    host.replace(host.begin(), host.end()-2, "node");
             desc->setHostname( host + hostPostfix );
         }
     }
