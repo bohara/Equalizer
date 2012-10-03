@@ -303,7 +303,7 @@ void Window::flush() const
 
 void Window::finish() const
 {
-    glFinish();
+  //glFinish(); /*Commented to ommit lagginess with display */
 }
 
 void Window::setSystemWindow( SystemWindow* window )
