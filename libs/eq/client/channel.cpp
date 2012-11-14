@@ -757,6 +757,7 @@ void Channel::declareRegion( const eq::Viewport& vp )
 namespace
 {
 
+#ifndef NDEBUG
 bool _hasOverlap( PixelViewports& regions )
 {
     if( regions.size() < 2 )
@@ -772,6 +773,7 @@ bool _hasOverlap( PixelViewports& regions )
         }
     return false;
 }
+#endif
 
 /** Remove overlapping regions by merging them */
 bool _removeOverlap( PixelViewports& regions )
@@ -820,7 +822,7 @@ void Channel::declareRegion( const PixelViewport& region )
 #ifndef NDEBUG
         const PixelViewport pvpBefore = getRegion();
 #endif
-        while( _removeOverlap( regions )) /* nop */ ;
+        while( _removeOverlap( regions )) { /* nop */ }
 
 #ifndef NDEBUG
         LBASSERT( !_hasOverlap( regions ));
@@ -1597,6 +1599,7 @@ bool Channel::_asyncFinishReadback( const std::vector< size_t >& imagePos )
             if( images[j]->hasAsyncReadback( )) // finish async readback
             {
                 LBCHECK( getPipe()->startTransferThread( ));
+                getWindow()->createTransferWindow();
 
                 hasAsyncReadback = true;
                 _refFrame( frameNumber );
@@ -1978,9 +1981,8 @@ bool Channel::_cmdConfigInit( co::ICommand& cmd )
 
 bool Channel::_cmdConfigExit( co::ICommand& cmd )
 {
-    co::ObjectICommand command( cmd );
-
-    LBLOG( LOG_INIT ) << "Exit channel " << command << std::endl;
+    LBLOG( LOG_INIT ) << "Exit channel " << co::ObjectICommand( cmd )
+                      << std::endl;
 
     _deleteTransferContext();
 
@@ -2154,13 +2156,14 @@ bool Channel::_cmdFinishReadback( co::ICommand& cmd )
     const uint64_t imageIndex = command.get< uint64_t >();
     const uint32_t frameNumber = command.get< uint32_t >();
     const uint32_t taskID = command.get< uint32_t >();
-    const std::vector< uint128_t > nodes =
+    const std::vector< uint128_t >& nodes =
                                       command.get< std::vector< uint128_t > >();
-    const std::vector< uint128_t > netNodes =
+    const std::vector< uint128_t >& netNodes =
                                       command.get< std::vector< uint128_t > >();
 
     getWindow()->makeCurrentTransfer();
-    _finishReadback( frameData, imageIndex, frameNumber, taskID, nodes, netNodes );
+    _finishReadback( frameData, imageIndex, frameNumber, taskID, nodes,
+                     netNodes );
     _unrefFrame( frameNumber );
     return true;
 }

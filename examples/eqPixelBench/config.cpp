@@ -55,7 +55,7 @@ uint32_t Config::startFrame( const eq::uint128_t& frameID )
     return eq::Config::startFrame( frameID );
 }
 
-bool Config::handleEvent( eq::EventCommand command )
+bool Config::handleEvent( eq::EventICommand command )
 {
     switch( command.getEventType( ))
     {
@@ -107,6 +107,8 @@ bool Config::handleEvent( eq::EventCommand command )
             std::cout << area << "( size CPU : " << dataSizeCPU << " bytes ";
             std::cout << "/ time : " <<  msec << "ms )";
         }
+
+        std::cout << std::endl;
         return true;
     }
 

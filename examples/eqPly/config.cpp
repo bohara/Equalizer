@@ -374,7 +374,7 @@ bool Config::_needNewFrame()
              _tracker.isRunning() || _redraw );
 }
 
-bool Config::handleEvent( eq::EventCommand command )
+bool Config::handleEvent( eq::EventICommand command )
 {
     switch( command.getEventType( ))
     {
@@ -524,7 +524,6 @@ bool Config::handleEvent( eq::EventCommand command )
             if( _useIdleAA )
             {
                 const int32_t steps = command.get< int32_t >();
-                LBINFO << steps << " FSAA steps to do" << std::endl;
                 _numFramesAA = LB_MAX( _numFramesAA, steps );
             }
             else

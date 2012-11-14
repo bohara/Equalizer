@@ -37,6 +37,7 @@
 #include <eq/util/objectManager.h>
 #include <eq/fabric/commands.h>
 #include <eq/fabric/elementVisitor.h>
+#include <eq/fabric/leafVisitor.h>
 #include <eq/fabric/task.h>
 
 #include <co/barrier.h>
@@ -479,12 +480,12 @@ bool Window::configInitGL( const uint128_t& )
     return true;
 }
 
-const SystemWindow* Window::getTransferSystemWindow()
+void Window::createTransferWindow()
 {
-    if( _transferWindow )
-        return _transferWindow;
-
     LBASSERT( _systemWindow );
+
+    if( _transferWindow )
+        return;
 
     // create another (shared) osWindow with no drawable, restore original
     const int32_t drawable = getIAttribute( IATTR_HINT_DRAWABLE );
@@ -506,28 +507,25 @@ const SystemWindow* Window::getTransferSystemWindow()
         LBERROR << "Window system " << pipe->getWindowSystem()
                 << " not implemented or supported" << std::endl;
 
-
     setIAttribute( IATTR_HINT_DRAWABLE, drawable );
+    makeCurrent();
 
     LBVERB << "Transfer window initialization finished" << std::endl;
-    return _transferWindow;
 }
 
 const GLEWContext* Window::getTransferGlewContext()
 {
-    const SystemWindow* transferWindow = getTransferSystemWindow();
-    if( transferWindow )
-        return transferWindow->glewGetContext();
+    LBASSERT( _transferWindow );
+    if( _transferWindow )
+        return _transferWindow->glewGetContext();
     return 0;
 }
 
 void Window::makeCurrentTransfer( const bool useCache )
 {
-    const SystemWindow* window = getTransferSystemWindow();
-    LBASSERT( window );
-
-    if( window )
-        window->makeCurrent( useCache );
+    LBASSERT( _transferWindow );
+    if( _transferWindow )
+        _transferWindow->makeCurrent( useCache );
 }
 
 

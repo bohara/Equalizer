@@ -34,6 +34,10 @@
   increased performance during scalable rendering.
 </p>
 <p>
+  Equalizer 1.4.1 is a bugfix release for Equalizer 1.4, containing the fixes
+  <a href="#bugfixes">listed below</a>.
+</p>
+<p>
   Equalizer 1.4 is a feature release extending the 1.0 API, distilling over
   seven years of development and decades of experience into a feature-rich,
   high-performance and mature parallel rendering framework and an
@@ -157,6 +161,17 @@
 <a name="bugfixes"></a>
 <h3>2.7. Bug Fixes</h3>
 <p>
+  Equalizer 1.4.1 includes the following bugfixes over the 1.4 release:
+</p>
+<ul>
+  <li><a href="https://github.com/Eyescale/Equalizer/issues/162">162</a>:
+    WGL window compile error</li>
+  <li><a href="https://github.com/Eyescale/Equalizer/issues/160">160</a>:
+    Memleak with pipe thread affinity</li>
+  <li><a href="https://github.com/Eyescale/Equalizer/issues/158">158</a>:
+    Non-freed GPUCompressors after application exit</li>
+</ul>
+<p>
   Equalizer 1.4 includes various bugfixes over the 1.2.1 release, including the
   following:
 </p>
@@ -221,7 +236,7 @@
 <h2>3. About</h2>
 <p>
   Equalizer is a cross-platform toolkit, designed to run on any modern operating
-  system, including all Unix variants and the Windows operating system. A 
+  system, including all Unix variants and the Windows operating system. A
   <a href="http://www.equalizergraphics.com/compatibility.html">compatibility
   matrix</a> can be found on the Equalizer website.
 </p>
@@ -253,7 +268,7 @@
 <a name="documentation"></a>
 <h3>3.3. Documentation</h3>
 <p>
-  The Programming and User Guide is available as a 
+  The Programming and User Guide is available as a
   <a href="https://www.createspace.com/3943261">hard-copy</a>
   and <a href="http://www.equalizergraphics.com/survey.html">online</a>.
   The <a href="http://www.equalizergraphics.com/documents/Developer/API-1.4/index.html">API
@@ -271,7 +286,7 @@
 <a name="support"></a>
 <h3>3.4. Support</h3>
 <p>
-  Technical questions can be posted to the 
+  Technical questions can be posted to the
   <a href="http://www.equalizergraphics.com/cgi-bin/mailman/listinfo/eq-dev">
     Developer Mailing List</a>, or directly to
   <a href="mailto:info@equalizergraphics.com?subject=Equalizer%20question">

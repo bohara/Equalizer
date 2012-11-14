@@ -76,7 +76,14 @@ Channel::Channel( eq::Window* parent )
         frameData->newImage( eq::Frame::TYPE_MEMORY, getDrawableConfig( ));
 }
 
-void Channel::frameStart( const eq::uint128_t& frameID, const uint32_t frameNumber )
+bool Channel::configExit()
+{
+    _frame.getData()->resetPlugins();
+    return eq::Channel::configExit();
+}
+
+void Channel::frameStart( const eq::uint128_t& frameID,
+                          const uint32_t frameNumber )
 {
     Config* config = static_cast< Config* >( getConfig( ));
     const lunchbox::Clock* clock  = config->getClock();
@@ -119,6 +126,8 @@ void Channel::frameDraw( const eq::uint128_t& frameID )
 
 void Channel::_testFormats( float applyZoom )
 {
+    glGetError(); // reset
+
     //----- setup constant data
     const eq::Images& images = _frame.getImages();
     eq::Image*        image  = images[ 0 ];
@@ -132,7 +141,6 @@ void Channel::_testFormats( float applyZoom )
     eq::Window::ObjectManager* glObjects = getObjectManager();
 
     //----- test all default format/type combinations
-    glGetError();
     for( uint32_t i=0; _enums[i].internalFormatString; ++i )
     {
         const uint32_t internalFormat = _enums[i].internalFormat;
@@ -142,8 +150,8 @@ void Channel::_testFormats( float applyZoom )
         image->setAlphaUsage( false );
 
         const GLEWContext* glewContext = glewGetContext();
-        std::vector< uint32_t > names;
-        image->findTransferers( eq::Frame::BUFFER_COLOR, glewContext, names );
+        const std::vector< uint32_t >& names =
+            image->findTransferers( eq::Frame::BUFFER_COLOR, glewContext );
 
         for( std::vector< uint32_t >::const_iterator j = names.begin();
              j != names.end(); ++j )
@@ -161,31 +169,39 @@ void Channel::_testFormats( float applyZoom )
             // read
             glFinish();
             size_t nLoops = 0;
-            clock.reset();
-            while( clock.getTime64() < 100 /*ms*/ )
+            try
             {
-                image->startReadback( eq::Frame::BUFFER_COLOR, pvp, zoom,
-                                      glObjects );
-                image->finishReadback( zoom, glObjects->glewGetContext( ));
-                ++nLoops;
+                clock.reset();
+                while( clock.getTime64() < 100 /*ms*/ )
+                {
+                    image->startReadback( eq::Frame::BUFFER_COLOR, pvp, zoom,
+                                          glObjects );
+                    image->finishReadback( zoom, glObjects->glewGetContext( ));
+                    ++nLoops;
+                }
+                glFinish();
+                const float msec = clock.getTimef() / float( nLoops );
+                const GLenum error = glGetError(); // release mode
+                if( error != GL_NO_ERROR )
+                    throw eq::Exception( error );
+
+                const eq::PixelData& pixels =
+                    image->getPixelData( eq::Frame::BUFFER_COLOR );
+                const eq::Vector2i area( pixels.pvp.w, pixels.pvp.h );
+                const uint64_t dataSizeGPU = area.x() * area.y() *
+                                             _enums[i].pixelSize;
+                const uint64_t dataSizeCPU =
+                    image->getPixelDataSize( eq::Frame::BUFFER_COLOR );
+
+                _sendEvent( READBACK, msec, area, formatType.str(), dataSizeGPU,
+                            dataSizeCPU );
             }
-            glFinish();
-            float msec = clock.getTimef() / float( nLoops );
-
-            const eq::PixelData& pixels =
-                image->getPixelData( eq::Frame::BUFFER_COLOR );
-            eq::Vector2i area;
-            area.x() = pixels.pvp.w;
-            area.y() = pixels.pvp.h;
-            uint64_t dataSizeGPU = pixels.pvp.getArea() * _enums[i].pixelSize;
-            uint64_t dataSizeCPU =
-                             image->getPixelDataSize( eq::Frame::BUFFER_COLOR );
-
-            GLenum error = glGetError();
-            if( error != GL_NO_ERROR )
-                msec = -static_cast<float>( error );
-            _sendEvent( READBACK, msec, area, formatType.str(), dataSizeGPU,
-                        dataSizeCPU );
+            catch( const eq::GLException& e )
+            {
+                _sendEvent( READBACK, -static_cast<float>( e.glError ),
+                            eq::Vector2i(), formatType.str(), 0, 0 );
+                continue;
+            }
 
             // write
             eq::Compositor::ImageOp op;
@@ -194,32 +210,39 @@ void Channel::_testFormats( float applyZoom )
             op.offset = offset;
             op.zoom = zoom;
 
-            dataSizeCPU =
+            const uint64_t dataSizeCPU =
                 image->getPixelDataSize( eq::Frame::BUFFER_COLOR );
+            try
+            {
+                clock.reset();
+                eq::Compositor::assembleImage( image, op );
+                glFinish();
+                const float msec = clock.getTimef() / float( nLoops );
+                const GLenum error = glGetError(); // release mode
+                if( error != GL_NO_ERROR )
+                    throw eq::Exception( error );
 
-            clock.reset();
-            eq::Compositor::assembleImage( image, op );
-            msec = clock.getTimef();
-
-            const eq::PixelData& pixelA =
-                image->getPixelData( eq::Frame::BUFFER_COLOR );
-            area.x() = pixelA.pvp.w;
-            area.y() = pixelA.pvp.h;
-            dataSizeGPU =
-                image->getPixelDataSize( eq::Frame::BUFFER_COLOR );
-
-            error = glGetError();
-
-            if( error != GL_NO_ERROR )
-                msec = -static_cast<float>( error );
-            _sendEvent( ASSEMBLE, msec, area, formatType.str(), dataSizeGPU,
-                        dataSizeCPU );
+                const eq::PixelData& pixels =
+                    image->getPixelData( eq::Frame::BUFFER_COLOR );
+                const eq::Vector2i area( pixels.pvp.w, pixels.pvp.h );
+                const uint64_t dataSizeGPU =
+                    image->getPixelDataSize( eq::Frame::BUFFER_COLOR );
+                _sendEvent( ASSEMBLE, msec, area, formatType.str(), dataSizeGPU,
+                            dataSizeCPU );
+            }
+            catch( const eq::GLException& e ) // debug mode
+            {
+                _sendEvent( ASSEMBLE, -static_cast<float>( e.glError ),
+                            eq::Vector2i(), formatType.str(), 0, 0 );
+            }
         }
     }
 }
 
 void Channel::_testTiledOperations()
 {
+    glGetError(); // reset
+
     //----- setup constant data
     const eq::Images& images = _frame.getImages();
     LBASSERT( images[0] );
@@ -246,8 +269,7 @@ void Channel::_testTiledOperations()
 
     for( unsigned tiles = 0; tiles < NUM_IMAGES; ++tiles )
     {
-        _draw( 0 );
-
+        EQ_GL_CALL( _draw( 0 ));
         area.y() = subPVP.h * (tiles+1);
 
         //---- readback of 'tiles' depth images
@@ -267,9 +289,8 @@ void Channel::_testTiledOperations()
             clock.reset();
             image->startReadback( eq::Frame::BUFFER_DEPTH, subPVP,
                                   eq::Zoom::NONE, glObjects );
-            image->finishReadback( eq::Zoom::NONE, glObjects->glewGetContext( ));
+            image->finishReadback( eq::Zoom::NONE, glObjects->glewGetContext());
             msec += clock.getTimef();
-
         }
 
         _sendEvent( READBACK, msec, area, formatType.str(), 0, 0 );
@@ -298,7 +319,7 @@ void Channel::_testTiledOperations()
             clock.reset();
             image->startReadback( eq::Frame::BUFFER_COLOR, subPVP,
                                   eq::Zoom::NONE, glObjects );
-            image->finishReadback( eq::Zoom::NONE, glObjects->glewGetContext( ));
+            image->finishReadback( eq::Zoom::NONE, glObjects->glewGetContext());
             msec += clock.getTimef();
         }
         _sendEvent( READBACK, msec, area, formatType.str(), 0, 0 );
@@ -342,6 +363,8 @@ void Channel::_testTiledOperations()
 
 void Channel::_testDepthAssemble()
 {
+    glGetError(); // reset
+
     //----- setup constant data
     const eq::Images& images = _frame.getImages();
     eq::Image* image  = images[ 0 ];
@@ -470,48 +493,13 @@ void Channel::_saveImage( const eq::Image* image,
 
 void Channel::_draw( const eq::uint128_t& spin )
 {
-    glPushAttrib( GL_ALL_ATTRIB_BITS );
+    EQ_GL_CALL( glPushAttrib( GL_ALL_ATTRIB_BITS ));
 
+    bindFrameBuffer();
     eq::Channel::frameDraw( spin );
 
-    glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT );
-    glEnable( GL_DEPTH_TEST );
-
-#if 0
-    setNearFar( 0.5f, 5.0f );
-    const GLfloat lightPosition[]    = {5.0f, 0.0f, 5.0f, 0.0f};
-    const GLfloat lightDiffuse[]     = {0.8f, 0.8f, 0.8f, 1.0f};
-
-    const GLfloat materialDiffuse[]  = {0.8f, 0.8f, 0.8f, 1.0f};
-
-    glLightfv( GL_LIGHT0, GL_POSITION, lightPosition );
-    glLightfv( GL_LIGHT0, GL_DIFFUSE,  lightDiffuse  );
-
-    glMaterialfv( GL_FRONT, GL_DIFFUSE,   materialDiffuse );
-
-    eq::Matrix4f rotation;
-    eq::Vector3f translation;
-
-    translation   = eq::Vector3f::ZERO;
-    translation.z = -2.f;
-    rotation = eq::Matrix4f::IDENTITY;
-    rotation.rotate_x( static_cast<float>( -M_PI_2 ));
-    rotation.rotate_y( static_cast<float>( -M_PI_2 ));
-
-    glTranslatef( translation.x, translation.y, translation.z );
-    glMultMatrixf( rotation.ml );
-
-    glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-    glColor3f( 1.f, 1.f, 0.f );
-    glNormal3f( 1.f, -1.f, 0.f );
-    glBegin( GL_TRIANGLE_STRIP );
-        glVertex3f(  1.f, 10.f,  2.5f );
-        glVertex3f( -1.f, 10.f,  2.5f );
-        glVertex3f(  1.f,-10.f, -2.5f );
-        glVertex3f( -1.f,-10.f, -2.5f );
-    glEnd();
-
-#else
+    EQ_GL_CALL( glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT ));
+    EQ_GL_CALL( glEnable( GL_DEPTH_TEST ));
 
     const float lightPos[] = { 0.0f, 0.0f, 1.0f, 0.0f };
     glLightfv( GL_LIGHT0, GL_POSITION, lightPos );
@@ -583,9 +571,7 @@ void Channel::_draw( const eq::uint128_t& spin )
     glVertex3f( -1.0f, -.7f, -.7f );
     glEnd();
 
-#endif
-
-    glPopAttrib( );
+    EQ_GL_CALL( glPopAttrib( ));
 }
 
 
