@@ -54,7 +54,7 @@ void Display::discoverLocal( Config* config, const uint32_t flags )
 
     Pipe* pipe = pipes.front();
     Window* window = new Window( pipe );
-    window->setViewport( Viewport( .0f, .0f, 1.f, 1.f ));
+    window->setViewport( Viewport( .0f, .0f, 0.5f, 1.f ));
     window->setName( pipe->getName() + " window" );
     window->setIAttribute( Window::IATTR_PLANES_STENCIL, 1 );
 
