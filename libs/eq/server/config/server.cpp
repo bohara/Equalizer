@@ -124,18 +124,17 @@ static void _setNetwork( const Config* config, const co::ConnectionType type,
         desc->type = type;
         //desc->bandwidth = 300000; // To disable compressor
 
-        const std::string& hostname = node->getHost();        
+        std::string hostname = node->getHost();        
         if( hostname.empty( )) // appNode!?
         {
-            EQASSERT( node->isApplicationNode( ));
-            desc->setHostname( std::string( "node01" ) + hostPostfix );
+	  char fullName[256];
+	  if( gethostname(fullName, 255) == -1 )
+	    LBERROR << "Failed to find hostname of localhost" << std::endl;
+	  hostname = fullName;
         }
-        else
-        {
-            std::string host = hostname.substr( 0, hostname.find( '.' ));
-	    host.replace(host.begin(), host.end()-2, "node");
-            desc->setHostname( host + hostPostfix );
-        }
+	std::string host = hostname.substr( 0, hostname.find( '.' ));
+	host.replace(host.begin(), host.end()-2, "node");
+	desc->setHostname( host + hostPostfix );
     }
 }
 
@@ -161,13 +160,13 @@ void Server::configureForBenchmark( Config* config, const std::string& session_ 
             _setAffinity( config, affinityCPUs );
         }
         else if( token == "TenGig" )
-            _setNetwork( config, co::CONNECTIONTYPE_TCPIP, "t.cluster" );
+            _setNetwork( config, co::CONNECTIONTYPE_TCPIP, "t" );
         else if( token == "IPoIB" )
-            _setNetwork( config, co::CONNECTIONTYPE_TCPIP, "i.cluster" );
+            _setNetwork( config, co::CONNECTIONTYPE_TCPIP, "i" );
         else if( token == "SDP" )
-            _setNetwork( config, co::CONNECTIONTYPE_SDP, "i.cluster" );
+            _setNetwork( config, co::CONNECTIONTYPE_SDP, "i" );
         else if( token == "RDMA" )
-            _setNetwork( config, co::CONNECTIONTYPE_RDMA, "i.cluster" );
+            _setNetwork( config, co::CONNECTIONTYPE_RDMA, "i" );
     }
 }
 
