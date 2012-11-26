@@ -201,6 +201,6 @@ void EqPly::clientLoop()
          eq::Client::clientLoop();
          LBINFO << "Configuration run successfully executed" << std::endl;
     }
-    while( _initData.isResident( )); // execute at lease one config run
+    while( _initData.isResident( )); // execute at least one config run
 }
 }
