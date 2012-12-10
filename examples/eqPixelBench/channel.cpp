@@ -183,7 +183,7 @@ void Channel::_testFormats( float applyZoom )
                 const float msec = clock.getTimef() / float( nLoops );
                 const GLenum error = glGetError(); // release mode
                 if( error != GL_NO_ERROR )
-                    throw eq::Exception( error );
+                    throw eq::GLException( error );
 
                 const eq::PixelData& pixels =
                     image->getPixelData( eq::Frame::BUFFER_COLOR );
@@ -493,11 +493,10 @@ void Channel::_saveImage( const eq::Image* image,
 
 void Channel::_draw( const eq::uint128_t& spin )
 {
+    bindFrameBuffer();
     EQ_GL_CALL( glPushAttrib( GL_ALL_ATTRIB_BITS ));
 
-    bindFrameBuffer();
     eq::Channel::frameDraw( spin );
-
     EQ_GL_CALL( glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT ));
     EQ_GL_CALL( glEnable( GL_DEPTH_TEST ));
 

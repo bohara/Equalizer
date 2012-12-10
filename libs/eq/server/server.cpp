@@ -34,6 +34,7 @@
 #endif
 
 #include <eq/fabric/commands.h>
+#include <eq/fabric/configParams.h>
 
 #include <co/iCommand.h>
 #include <co/connectionDescription.h>
@@ -157,19 +158,15 @@ void Server::handleCommands()
 bool Server::_cmdChooseConfig( co::ICommand& command )
 {
     const uint32_t requestID = command.get< uint32_t >();
-    uint32_t flags;
-    command >> flags;
-
-    const std::string& workDir = command.get< std::string >();
-    const std::string& renderClient = command.get< std::string >();
+    const fabric::ConfigParams& params = command.get< fabric::ConfigParams >();
 
     LBVERB << "Handle choose config " << command << " req " << requestID
-           << " renderer " << workDir << '/' << renderClient << std::endl;
+           << " renderer " << params.getWorkDir() << '/'
+           << params.getRenderClient() << std::endl;
 
     Config* config = 0;
     const Configs& configs = getConfigs();
-    for( Configs::const_iterator i = configs.begin();
-         i != configs.end() && !config; ++i )
+    for( ConfigsCIter i = configs.begin(); i != configs.end() && !config; ++i )
     {
         Config* candidate = *i;
         const float version = candidate->getFAttribute( Config::FATTR_VERSION );
@@ -182,7 +179,7 @@ bool Server::_cmdChooseConfig( co::ICommand& command )
     if( !config )
     {
         const std::string& configFile = command.get< std::string >();
-        config = config::Server::configure( this, configFile, flags );
+        config = config::Server::configure( this, configFile, params );
         if( config )
         {
             config->register_();
@@ -203,8 +200,8 @@ bool Server::_cmdChooseConfig( co::ICommand& command )
     ConfigBackupVisitor backup;
     config->accept( backup );
     config->setApplicationNetNode( node );
-    config->setWorkDir( workDir );
-    config->setRenderClient( renderClient );
+    config->setWorkDir( params.getWorkDir( ));
+    config->setRenderClient( params.getRenderClient( ));
     config->commit();
 
     node->send( fabric::CMD_SERVER_CREATE_CONFIG )

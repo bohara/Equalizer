@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2005-2011, Stefan Eilemann <eile@equalizergraphics.com>
+/* Copyright (c) 2005-2012, Stefan Eilemann <eile@equalizergraphics.com>
  *                    2010, Cedric Stalder <cedric Stalder@gmail.com>
  *               2010-2012, Daniel Nachbaur <danielnachbaur@gmail.com>
  *
@@ -143,6 +143,32 @@ private:
     const Segment* const _segment;
     const View* const    _view;
     Channel*             _result;
+};
+
+class UpdateEqualizersVisitor : public ConfigVisitor
+{
+public:
+    UpdateEqualizersVisitor() {}
+
+    // No need to go down on nodes.
+    virtual VisitorResult visitPre( Node* node ) { return TRAVERSE_PRUNE; }
+
+    virtual VisitorResult visit( Compound* compound )
+    {
+        Channel* dest = compound->getInheritChannel();
+        if( !dest )
+            return TRAVERSE_CONTINUE;
+
+        View* view = dest->getView();
+        if( !view )
+            return TRAVERSE_CONTINUE;
+
+        const Equalizers& equalizers = compound->getEqualizers();
+        for( EqualizersCIter i = equalizers.begin(); i != equalizers.end(); ++i)
+            view->getEqualizer() = *(*i);
+
+        return TRAVERSE_CONTINUE;
+    }
 };
 }
 
@@ -481,7 +507,6 @@ VisitorResult Config::_acceptCompounds( ConfigVisitor& visitor ) const
 
 void Config::register_()
 {
-    ServerPtr server = getServer();
     ConfigRegistrator registrator;
     accept( registrator );
 }
@@ -780,6 +805,10 @@ bool Config::_init( const uint128_t& initID )
     // Needed to set up active state for first LB update
     for( CompoundsCIter i = _compounds.begin(); i != _compounds.end(); ++i )
         (*i)->update( 0 );
+
+    // Update equalizer properties in views
+    UpdateEqualizersVisitor updater;
+    accept( updater );
 
     _needsFinish = false;
     _state = STATE_RUNNING;

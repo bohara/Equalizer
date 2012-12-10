@@ -45,26 +45,6 @@ namespace server
         virtual ~TreeEqualizer();
         virtual void toStream( std::ostream& os ) const { os << this; }
 
-        enum Mode
-        {
-            MODE_DB = 0,     //!< Adapt for a sort-last decomposition
-            MODE_HORIZONTAL, //!< Adapt for sort-first using horizontal stripes
-            MODE_VERTICAL,   //!< Adapt for sort-first using vertical stripes
-            MODE_2D          //!< Adapt for a sort-first decomposition
-        };
-
-        /** Set the load balancer adaptation mode. */
-        void setMode( const Mode mode ) { _mode = mode; }
-
-        /** @return the load balancer adaptation mode. */
-        Mode getMode() const { return _mode; }
-
-        /** Set the damping factor for the viewport or range adjustment.  */
-        void setDamping( const float damping ) { _damping = damping; }
-
-        /** @return the damping factor. */
-        float getDamping() const { return _damping; }
-
         /** @sa CompoundListener::notifyUpdatePre */
         virtual void notifyUpdatePre( Compound* compound,
                                       const uint32_t frameNumber );
@@ -75,26 +55,6 @@ namespace server
                                      const Statistics& statistics,
                                      const Viewport& region );
 
-        /** Set a boundary for 2D tiles. */
-        void setBoundary( const Vector2i& boundary )
-        {
-            LBASSERT( boundary.x() > 0 && boundary.y() > 0 );
-            _boundary2i = boundary;
-        }
-
-        /** Set a boundary for DB ranges. */
-        void setBoundary( const float boundary )
-        {
-            LBASSERT( boundary > 0.0f );
-            _boundaryf = boundary;
-        }
-
-        /** @return the boundary for 2D tiles. */
-        const Vector2i& getBoundary2i() const { return _boundary2i; }
-
-        /** @return the boundary for DB ranges. */
-        float getBoundaryf() const { return _boundaryf; }
-
         virtual uint32_t getType() const { return fabric::TREE_EQUALIZER; }
 
     protected:
@@ -104,16 +64,11 @@ namespace server
             { LBASSERT( !_tree ); }
 
     private:
-        Mode  _mode;    //!< The current adaptation mode
-        float _damping; //!< The damping factor,  (0: No damping, 1: No changes)
-        Vector2i _boundary2i;  // default: 1 1
-        float    _boundaryf;   // default: numeric_limits<float>::epsilon
-
         struct Node
         {
             Node() : left(0), right(0), compound(0), mode( MODE_VERTICAL )
-                   , resources( 0.0f ), split( 0.5f ), boundaryf( 0.0f )
-                   , time( 1 ) {}
+                   , resources( 0.0f ), split( 0.5f ), oldsplit( 0.0f ), boundaryf( 0.0f )
+                   , resistancef( 0.0f ), time( 1 ) {}
             ~Node() { delete left; delete right; }
 
             Node*     left;      //<! Left child (only on non-leafs)
@@ -122,8 +77,11 @@ namespace server
             TreeEqualizer::Mode mode; //<! What to adapt
             float     resources; //<! total amount of resources of subtree
             float     split;     //<! 0..1 local (vp, range) split
+            float     oldsplit;
             float     boundaryf;
             Vector2i  boundary2i;
+            float     resistancef;
+            Vector2i  resistance2i;
             Vector2i  maxSize;
             int64_t   time;
         };
@@ -135,7 +93,6 @@ namespace server
         //-------------------- Methods --------------------
         /** @return true if we have a valid LB tree */
         Node* _buildTree( const Compounds& children );
-        void _init( Node* node );
 
         /** Clear the tree, does not delete the nodes. */
         void _clearTree( Node* node );
@@ -150,8 +107,6 @@ namespace server
         void _split( Node* node );
         void _assign( Node* node, const Viewport& vp, const Range& range );
     };
-
-    std::ostream& operator << ( std::ostream& os, const TreeEqualizer::Mode );
 }
 }
 
